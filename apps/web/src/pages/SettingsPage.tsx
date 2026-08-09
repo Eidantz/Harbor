@@ -95,9 +95,10 @@ export function SettingsPage() {
         <div>
           <h1>MCP tokens</h1>
           <p className="muted">
-            Create a Bearer token for Cursor MCP. Paste it into{' '}
-            <code>.cursor/mcp.json</code> as <code>KANBAN_API_TOKEN</code>, then reload MCP
-            servers.
+            Create a Bearer token for Claude Code / Cursor MCP. Paste the snippet below into your
+            client config (use an absolute path to <code>apps/mcp/dist/index.js</code>), then
+            reload MCP servers. Prefer <code>127.0.0.1</code> over <code>localhost</code> so
+            macOS does not hang on IPv6.
           </p>
         </div>
       </div>
@@ -110,7 +111,7 @@ export function SettingsPage() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Cursor MCP"
+              placeholder="Claude Code MCP"
               maxLength={80}
               required
             />
@@ -133,11 +134,12 @@ export function SettingsPage() {
             </div>
             <pre className="token-snippet">{`{
   "mcpServers": {
-    "kanban": {
+    "harbor-kanban-board": {
+      "type": "stdio",
       "command": "node",
-      "args": ["apps/mcp/dist/index.js"],
+      "args": ["/absolute/path/to/Harbor/apps/mcp/dist/index.js"],
       "env": {
-        "KANBAN_API_URL": "http://localhost:3001",
+        "KANBAN_API_URL": "http://127.0.0.1:3001",
         "KANBAN_API_TOKEN": "${created.token}"
       }
     }
