@@ -313,11 +313,20 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Create issue',
       description:
-        'Create an issue (or subtask via parentId). Defaults to first column and medium priority. Supports humanEffort (hours), locEffort (lines), and epicId (top-level only).',
+        'Create an issue (or subtask via parentId). Defaults to first column and medium priority. Supports humanEffort (hours), locEffort (lines), and epicId (top-level only). description is a short plain-text summary; use document for the long-form markdown plan/spec.',
       inputSchema: {
         projectId: ProjectIdSchema,
         title: z.string().min(1).max(300),
-        description: z.string().max(10000).optional(),
+        description: z
+          .string()
+          .max(300)
+          .optional()
+          .describe('Short plain-text summary (max 300 chars)'),
+        document: z
+          .string()
+          .max(100000)
+          .optional()
+          .describe('Long-form markdown plan/spec document'),
         type: IssueTypeSchema.optional(),
         priority: IssuePrioritySchema.optional(),
         humanEffort: z
@@ -355,11 +364,22 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Update issue',
       description:
-        'Update issue fields (incl. priority, humanEffort hours, locEffort, dueDate, epicId). archived: true hides the issue from the board (restorable with false). Returns the full updated issue. epicId is top-level only; null clears.',
+        'Update issue fields (incl. priority, humanEffort hours, locEffort, dueDate, epicId). archived: true hides the issue from the board (restorable with false). Returns the full updated issue. epicId is top-level only; null clears. description is a short plain-text summary; document is the long-form markdown plan/spec.',
       inputSchema: {
         issueId: IssueIdSchema,
         title: z.string().min(1).max(300).optional(),
-        description: z.string().max(10000).nullable().optional(),
+        description: z
+          .string()
+          .max(300)
+          .nullable()
+          .optional()
+          .describe('Short plain-text summary (max 300 chars); null clears'),
+        document: z
+          .string()
+          .max(100000)
+          .nullable()
+          .optional()
+          .describe('Long-form markdown plan/spec document; null clears'),
         type: IssueTypeSchema.optional(),
         priority: IssuePrioritySchema.optional(),
         humanEffort: z.number().min(0).nullable().optional(),
@@ -454,11 +474,21 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     'subtask_create',
     {
       title: 'Create subtask',
-      description: 'Create a subtask under a parent issue. Returns the full issue.',
+      description:
+        'Create a subtask under a parent issue. Returns the full issue. description is a short plain-text summary; use document for the long-form markdown plan/spec.',
       inputSchema: {
         issueId: IssueIdSchema.describe('Parent issue id'),
         title: z.string().min(1).max(300),
-        description: z.string().max(10000).optional(),
+        description: z
+          .string()
+          .max(300)
+          .optional()
+          .describe('Short plain-text summary (max 300 chars)'),
+        document: z
+          .string()
+          .max(100000)
+          .optional()
+          .describe('Long-form markdown plan/spec document'),
         type: IssueTypeSchema.optional(),
         priority: IssuePrioritySchema.optional(),
         humanEffort: z.number().min(0).nullable().optional(),
@@ -469,6 +499,49 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     },
     async ({ issueId, ...body }) =>
       runTool(async () => api.post(`/api/issues/${issueId}/subtasks`, body)),
+  );
+
+  // ── Attachments ───────────────────────────────────────────────────────
+  server.registerTool(
+    'attachment_list',
+    {
+      title: 'List attachments',
+      description:
+        'List file attachments for an issue (or subtask): filename, mimeType, size.',
+      inputSchema: { issueId: IssueIdSchema },
+    },
+    async ({ issueId }) =>
+      runTool(async () => api.get(`/api/issues/${issueId}/attachments`)),
+  );
+
+  server.registerTool(
+    'attachment_create_text',
+    {
+      title: 'Create markdown/text attachment',
+      description:
+        'Create a markdown/text file attachment on an issue (or subtask) from a string — no file upload needed. Defaults to plan.md; .md is appended when the filename has no extension.',
+      inputSchema: {
+        issueId: IssueIdSchema,
+        content: z
+          .string()
+          .min(1)
+          .max(100000)
+          .describe('File content (markdown or plain text)'),
+        filename: z
+          .string()
+          .min(1)
+          .max(120)
+          .optional()
+          .describe('Filename (default plan.md)'),
+      },
+    },
+    async ({ issueId, content, filename }) =>
+      runTool(async () =>
+        api.post(`/api/issues/${issueId}/attachments/text`, {
+          content,
+          ...(filename !== undefined ? { filename } : {}),
+        }),
+      ),
   );
 
   // ── Links (blocks only) ───────────────────────────────────────────────
@@ -626,18 +699,28 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Create epic',
       description:
-        'Create a project epic (outside the board). Optional description and color (#RRGGBB).',
+        'Create a project epic (outside the board). Optional short description, long-form markdown document, and color (#RRGGBB).',
       inputSchema: {
         projectId: ProjectIdSchema,
         name: z.string().min(1).max(120),
-        description: z.string().max(5000).optional(),
+        description: z
+          .string()
+          .max(300)
+          .optional()
+          .describe('Short plain-text summary (max 300 chars)'),
+        document: z
+          .string()
+          .max(100000)
+          .optional()
+          .describe('Long-form markdown plan/spec document'),
         color: HexColorSchema.optional().describe('Badge color (default #7aa2f7)'),
       },
     },
-    async ({ projectId, name, description, color }) =>
+    async ({ projectId, name, description, document, color }) =>
       runTool(async () => {
         const body: Record<string, unknown> = { name };
         if (description !== undefined) body.description = description;
+        if (document !== undefined) body.document = document;
         if (color !== undefined) body.color = color;
         return api.post(`/api/projects/${projectId}/epics`, body);
       }),
@@ -647,20 +730,33 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     'epic_update',
     {
       title: 'Update epic',
-      description: 'Update epic name, description, color, and/or position.',
+      description:
+        'Update epic name, short description, markdown document, color, and/or position.',
       inputSchema: {
         epicId: EpicIdSchema,
         name: z.string().min(1).max(120).optional(),
-        description: z.string().max(5000).nullable().optional(),
+        description: z
+          .string()
+          .max(300)
+          .nullable()
+          .optional()
+          .describe('Short plain-text summary (max 300 chars); null clears'),
+        document: z
+          .string()
+          .max(100000)
+          .nullable()
+          .optional()
+          .describe('Long-form markdown plan/spec document; null clears'),
         color: HexColorSchema.optional(),
         position: z.number().int().min(0).optional().describe('List order (0-based)'),
       },
     },
-    async ({ epicId, name, description, color, position }) =>
+    async ({ epicId, name, description, document, color, position }) =>
       runTool(async () => {
         const body: Record<string, unknown> = {};
         if (name !== undefined) body.name = name;
         if (description !== undefined) body.description = description;
+        if (document !== undefined) body.document = document;
         if (color !== undefined) body.color = color;
         if (position !== undefined) body.position = position;
         return api.patch(`/api/epics/${epicId}`, body);

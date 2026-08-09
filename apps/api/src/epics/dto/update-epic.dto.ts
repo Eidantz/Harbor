@@ -18,11 +18,19 @@ export class UpdateEpicDto {
   @MaxLength(120)
   name?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Short summary (plain text); null clears' })
   @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsString()
-  @MaxLength(5000)
+  @MaxLength(300)
   description?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Long-form markdown plan/spec document; null clears',
+  })
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  @MaxLength(100000)
+  document?: string | null;
 
   @ApiPropertyOptional({ example: '#7aa2f7' })
   @IsOptional()

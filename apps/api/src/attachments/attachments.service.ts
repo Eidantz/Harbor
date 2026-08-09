@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, stat, unlink, writeFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ActivityService } from '../activity/activity.service';
 import { EventsService } from '../events/events.service';
@@ -48,6 +48,56 @@ export class AttachmentsService {
         filename: file.originalname,
         mimeType: file.mimetype || 'application/octet-stream',
         size: file.size,
+        storedName,
+      },
+    });
+
+    await this.activity.record({
+      projectId: issue.projectId,
+      issueId,
+      actorId,
+      type: 'updated',
+      payload: {
+        action: 'attachment_added',
+        attachmentId: attachment.id,
+        filename: attachment.filename,
+      },
+    });
+
+    this.events.emit(issue.projectId, 'attachment');
+    return attachment;
+  }
+
+  /** Create a text/markdown file attachment from a string (no multipart upload). */
+  async createFromText(
+    issueId: string,
+    opts: { content: string; filename?: string },
+    actorId: string,
+  ) {
+    const issue = await this.prisma.issue.findUnique({
+      where: { id: issueId },
+    });
+    if (!issue) throw new NotFoundException('Issue not found');
+
+    // Sanitize: strip any path components, default to plan.md
+    let filename = basename(opts.filename?.trim() || 'plan.md');
+    if (!extname(filename)) filename += '.md';
+    const ext = extname(filename).slice(0, 16).replace(/[^.\w-]/g, '');
+    const lower = ext.toLowerCase();
+    const mimeType =
+      lower === '.md' || lower === '.markdown' ? 'text/markdown' : 'text/plain';
+
+    const buffer = Buffer.from(opts.content, 'utf8');
+    const storedName = `${randomUUID()}${ext}`;
+    await mkdir(UPLOAD_DIR, { recursive: true });
+    await writeFile(join(UPLOAD_DIR, storedName), buffer);
+
+    const attachment = await this.prisma.attachment.create({
+      data: {
+        issueId,
+        filename,
+        mimeType,
+        size: buffer.byteLength,
         storedName,
       },
     });

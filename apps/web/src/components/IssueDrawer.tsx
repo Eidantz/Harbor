@@ -22,6 +22,7 @@ import {
 } from '../lib/format';
 import { useToast } from './Toast';
 import { Loading } from './Loading';
+import { MarkdownDocument } from './MarkdownDocument';
 import { PriorityBadge } from './PriorityBadge';
 import { TypeBadge } from './TypeBadge';
 
@@ -164,6 +165,7 @@ export function IssueDrawer(props: IssueDrawerProps) {
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [draftDocument, setDraftDocument] = useState('');
   const [draftType, setDraftType] = useState<IssueType>('task');
   const [draftPriority, setDraftPriority] = useState<IssuePriority>('medium');
   const [draftColumnId, setDraftColumnId] = useState(
@@ -271,6 +273,7 @@ export function IssueDrawer(props: IssueDrawerProps) {
       const created = await api.createIssue(projectId, {
         title: title.trim(),
         description: description.trim() || undefined,
+        document: draftDocument.trim() || undefined,
         type: draftType,
         priority: draftPriority,
         columnId: draftColumnId || undefined,
@@ -742,14 +745,33 @@ export function IssueDrawer(props: IssueDrawerProps) {
                 <section>
                   <h3>Description</h3>
                   <textarea
-                    rows={6}
+                    rows={2}
+                    maxLength={300}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     onBlur={() => {
                       if (!isCreate) void onSaveDescription();
                     }}
-                    placeholder="Add a description…"
+                    placeholder="Short summary (max 300 chars)…"
                   />
+                </section>
+
+                <section>
+                  <h3>Document</h3>
+                  {isCreate ? (
+                    <MarkdownDocument
+                      value={draftDocument.trim() ? draftDocument : null}
+                      onSave={(next) => setDraftDocument(next ?? '')}
+                      emptyLabel="Add a markdown plan/spec for this issue."
+                    />
+                  ) : (
+                    <MarkdownDocument
+                      value={issue?.document ?? null}
+                      saving={saving}
+                      onSave={(next) => saveFields({ document: next })}
+                      emptyLabel="No document yet. Add the plan or spec in markdown."
+                    />
+                  )}
                 </section>
 
                 {!isCreate && issue ? (

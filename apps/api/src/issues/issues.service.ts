@@ -247,6 +247,7 @@ export class IssuesService {
           number,
           title: dto.title,
           description: dto.description,
+          document: dto.document,
           type: dto.type ?? 'task',
           priority: dto.priority ?? 'medium',
           humanEffort: dto.humanEffort ?? null,
@@ -282,6 +283,7 @@ export class IssuesService {
     const data: Prisma.IssueUpdateInput = {};
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.description !== undefined) data.description = dto.description;
+    if (dto.document !== undefined) data.document = dto.document;
     if (dto.type !== undefined) data.type = dto.type;
     if (dto.priority !== undefined) data.priority = dto.priority;
     if (dto.humanEffort !== undefined) data.humanEffort = dto.humanEffort;

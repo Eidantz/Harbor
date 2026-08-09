@@ -231,6 +231,7 @@ export const api = {
     body: {
       title: string;
       description?: string;
+      document?: string;
       type?: IssueType;
       priority?: IssuePriority;
       humanEffort?: number | null;
@@ -256,6 +257,7 @@ export const api = {
     body: {
       title?: string;
       description?: string | null;
+      document?: string | null;
       type?: IssueType;
       priority?: IssuePriority;
       humanEffort?: number | null;
@@ -362,7 +364,7 @@ export const api = {
 
   createEpic(
     projectId: string,
-    body: { name: string; description?: string; color?: string },
+    body: { name: string; description?: string; document?: string; color?: string },
   ) {
     return request<Epic>(`/api/projects/${projectId}/epics`, {
       method: 'POST',
@@ -375,6 +377,7 @@ export const api = {
     body: {
       name?: string;
       description?: string | null;
+      document?: string | null;
       color?: string;
       position?: number;
     },

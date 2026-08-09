@@ -98,7 +98,10 @@ model Epic {
   id          String   @id @default(cuid())
   projectId   String
   name        String
+  /// Short summary (max 300 chars at the API level)
   description String?
+  /// Long-form markdown plan/spec document
+  document    String?
   color       String   @default("#7aa2f7")
   position    Int      @default(0)
   createdAt   DateTime @default(now())
@@ -140,7 +143,10 @@ model Issue {
   key         String
   number      Int
   title       String
+  /// Short summary (max 300 chars at the API level)
   description String?
+  /// Long-form markdown plan/spec document
+  document    String?
   type        IssueType     @default(task)
   priority    IssuePriority @default(medium)
   /// Estimated human effort in hours

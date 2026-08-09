@@ -62,6 +62,7 @@ export class EpicsService {
         projectId,
         name: dto.name,
         description: dto.description,
+        document: dto.document,
         color: dto.color ?? '#7aa2f7',
         position,
       },
@@ -76,6 +77,7 @@ export class EpicsService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.document !== undefined ? { document: dto.document } : {}),
         ...(dto.color !== undefined ? { color: dto.color } : {}),
         ...(dto.position !== undefined ? { position: dto.position } : {}),
       },

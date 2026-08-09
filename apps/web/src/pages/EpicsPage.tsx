@@ -5,6 +5,7 @@ import type { Epic } from '../api/types';
 import { ApiError } from '../api/types';
 import { ColorPicker } from '../components/ColorPicker';
 import { Loading } from '../components/Loading';
+import { MarkdownDocument } from '../components/MarkdownDocument';
 import { useToast } from '../components/Toast';
 import { contrastForeground } from '../lib/color';
 import type { ProjectContext } from './ProjectLayout';
@@ -23,6 +24,7 @@ export function EpicsPage() {
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(DEFAULT_EPIC_COLOR);
   const [newDescription, setNewDescription] = useState('');
+  const [newDocument, setNewDocument] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState(DEFAULT_EPIC_COLOR);
@@ -76,9 +78,11 @@ export function EpicsPage() {
         name: newName.trim(),
         color: newColor,
         description: newDescription.trim() || undefined,
+        document: newDocument.trim() || undefined,
       });
       setNewName('');
       setNewDescription('');
+      setNewDocument('');
       setNewColor(DEFAULT_EPIC_COLOR);
       setCreating(false);
       await load();
@@ -116,6 +120,20 @@ export function EpicsPage() {
       toast.push('Epic updated', 'success');
     } catch (err) {
       toast.push(err instanceof ApiError ? err.message : 'Update failed', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSaveDocument = async (epicId: string, next: string | null) => {
+    setSaving(true);
+    try {
+      await api.updateEpic(epicId, { document: next });
+      setDetail(await api.getEpic(epicId));
+      await load();
+      toast.push('Document saved', 'success');
+    } catch (err) {
+      toast.push(err instanceof ApiError ? err.message : 'Save failed', 'error');
     } finally {
       setSaving(false);
     }
@@ -180,9 +198,18 @@ export function EpicsPage() {
             <textarea
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="Optional"
-              maxLength={5000}
-              rows={3}
+              placeholder="Short summary (max 300 chars, optional)"
+              maxLength={300}
+              rows={2}
+            />
+          </label>
+          <label>
+            <span>Document (markdown)</span>
+            <textarea
+              value={newDocument}
+              onChange={(e) => setNewDocument(e.target.value)}
+              placeholder="Optional long-form plan/spec in markdown"
+              rows={6}
             />
           </label>
           <div className="epics-color-field">
@@ -265,8 +292,9 @@ export function EpicsPage() {
                       <textarea
                         value={editDescription}
                         onChange={(e) => setEditDescription(e.target.value)}
-                        maxLength={5000}
-                        rows={3}
+                        placeholder="Short summary (max 300 chars)"
+                        maxLength={300}
+                        rows={2}
                       />
                     </label>
                     <div className="epics-color-field">
@@ -305,6 +333,12 @@ export function EpicsPage() {
                         {detail.description ? (
                           <p className="muted">{detail.description}</p>
                         ) : null}
+                        <MarkdownDocument
+                          value={detail.document ?? null}
+                          saving={saving}
+                          onSave={(next) => onSaveDocument(epic.id, next)}
+                          emptyLabel="No document yet. Add the plan or spec in markdown."
+                        />
                         {(detail.issues?.length ?? 0) === 0 ? (
                           <p className="muted">No linked issues yet.</p>
                         ) : (

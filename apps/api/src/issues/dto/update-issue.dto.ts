@@ -22,11 +22,19 @@ export class UpdateIssueDto {
   @MaxLength(300)
   title?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Short summary (plain text); null clears' })
   @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsString()
-  @MaxLength(10000)
+  @MaxLength(300)
   description?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Long-form markdown plan/spec document; null clears',
+  })
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  @MaxLength(100000)
+  document?: string | null;
 
   @ApiPropertyOptional({ enum: IssueType })
   @IsOptional()

@@ -107,6 +107,8 @@ export interface EpicSummary {
 export interface Epic extends EpicSummary {
   projectId: string;
   description: string | null;
+  /** Long-form markdown plan/spec document */
+  document: string | null;
   position: number;
   createdAt?: string;
   updatedAt?: string;
@@ -139,6 +141,7 @@ export interface BoardIssue {
   number: number;
   title: string;
   description: string | null;
+  document?: string | null;
   type: IssueType;
   priority: IssuePriority;
   humanEffort: number | null;
@@ -187,6 +190,8 @@ export interface IssueDetail {
   number: number;
   title: string;
   description: string | null;
+  /** Long-form markdown plan/spec document */
+  document: string | null;
   type: IssueType;
   priority: IssuePriority;
   humanEffort: number | null;
@@ -244,6 +249,7 @@ export interface IssueListItem {
   number: number;
   title: string;
   description: string | null;
+  document?: string | null;
   type: IssueType;
   priority: IssuePriority;
   humanEffort?: number | null;

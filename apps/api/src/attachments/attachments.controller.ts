@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -20,6 +21,7 @@ import {
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthActor } from '../auth/auth.types';
 import { AttachmentsService } from './attachments.service';
+import { CreateTextAttachmentDto } from './dto/create-text-attachment.dto';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
@@ -55,6 +57,19 @@ export class AttachmentsController {
       );
     }
     return this.attachments.upload(issueId, file, user.id);
+  }
+
+  @Post('issues/:issueId/attachments/text')
+  @ApiOperation({
+    summary:
+      'Create a markdown/text file attachment from a JSON string (no multipart upload)',
+  })
+  createText(
+    @Param('issueId') issueId: string,
+    @Body() dto: CreateTextAttachmentDto,
+    @CurrentUser() user: AuthActor,
+  ) {
+    return this.attachments.createFromText(issueId, dto, user.id);
   }
 
   @Get('attachments/:attachmentId/download')

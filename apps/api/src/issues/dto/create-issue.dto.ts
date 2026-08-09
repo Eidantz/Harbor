@@ -20,11 +20,17 @@ export class CreateIssueDto {
   @MaxLength(300)
   title!: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Short summary (plain text)' })
   @IsOptional()
   @IsString()
-  @MaxLength(10000)
+  @MaxLength(300)
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Long-form markdown plan/spec document' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100000)
+  document?: string;
 
   @ApiPropertyOptional({ enum: IssueType, default: IssueType.task })
   @IsOptional()
