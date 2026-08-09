@@ -61,11 +61,13 @@ bun run setup:env       # copies .env.example → .env and links apps/api/.env
 bun run docker:up       # builds & starts db + api + web
 ```
 
-| Service | URL |
-|---------|-----|
+| Service | URL (defaults) |
+|---------|----------------|
 | Harbor UI | http://localhost:3000 |
 | API health | http://localhost:3001/health |
 | OpenAPI | http://localhost:3001/api/docs |
+
+Ports come from `.env` (`WEB_PORT`, `API_PORT`, `POSTGRES_PORT`). Change them if something else already binds `3000` / `5432`.
 
 On a fresh database, open the UI and **create the admin account**. After that, the same screen is sign-in. Seed data includes sample project **KAN**.
 
