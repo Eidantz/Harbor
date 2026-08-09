@@ -1,0 +1,31 @@
+{
+  "name": "kanban-board",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @kanban/api --filter @kanban/web run dev",
+    "dev:api": "pnpm --filter @kanban/api dev",
+    "dev:web": "pnpm --filter @kanban/web dev",
+    "dev:mcp": "pnpm --filter @kanban/mcp dev",
+    "build": "pnpm -r run build",
+    "build:api": "pnpm --filter @kanban/api build",
+    "build:web": "pnpm --filter @kanban/web build",
+    "build:mcp": "pnpm --filter @kanban/mcp build",
+    "start:api": "pnpm --filter @kanban/api start:prod",
+    "db:generate": "pnpm --filter @kanban/api prisma:generate",
+    "db:migrate": "pnpm --filter @kanban/api prisma:migrate",
+    "db:migrate:deploy": "pnpm --filter @kanban/api prisma:migrate:deploy",
+    "db:seed": "pnpm --filter @kanban/api prisma:seed",
+    "db:studio": "pnpm --filter @kanban/api prisma:studio",
+    "lint": "pnpm -r --if-present run lint",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "setup:env": "cp -n .env.example .env 2>/dev/null || true; ln -sfn ../../.env apps/api/.env",
+    "smoke": "node scripts/smoke.mjs"
+  }
+}

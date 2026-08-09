@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+apps/api/.env
+
+# Cursor local MCP config (contains API tokens)
+.cursor/mcp.json
+!.cursor/mcp.json.example
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs / coverage
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+coverage/
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# Docker
+docker-data/
+
+# Uploaded attachments (local dev; Docker uses a named volume)
+apps/api/uploads/
