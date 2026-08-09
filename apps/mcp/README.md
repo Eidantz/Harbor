@@ -4,7 +4,7 @@ Stdio MCP server for the local Kanban board. Talks **HTTP only** to the Nest API
 
 ## Setup
 
-1. Run the API (e.g. `bun run docker:up` or `bun run dev:api`) on `http://localhost:3001`.
+1. Run the API (e.g. `bun run docker:up` or `bun run dev:api`) on `http://127.0.0.1:3001`.
 2. In Harbor → **MCP tokens** → create a token and copy the plaintext.
 3. Build:
 
@@ -15,22 +15,23 @@ bun run build:mcp
 4. Register the stdio server in any MCP client (Claude Desktop / Claude Code, Cursor, etc.) — paste the token:
 
 ```json
-"harbor": {
+"harbor-kanban-board": {
+  "type": "stdio",
   "command": "node",
-  "args": ["apps/mcp/dist/index.js"],
+  "args": ["/absolute/path/to/Harbor/apps/mcp/dist/index.js"],
   "env": {
-    "KANBAN_API_URL": "http://localhost:3001",
+    "KANBAN_API_URL": "http://127.0.0.1:3001",
     "KANBAN_API_TOKEN": "<token from Harbor MCP tokens>"
   }
 }
 ```
 
-Use an absolute path to `dist/index.js` when the client does not start in the repo root. See the root README for client-specific config locations.
+Use an absolute path to `dist/index.js` (Claude Code often starts outside the repo). Prefer `127.0.0.1` over `localhost` — Docker binds IPv4 only, and on macOS `localhost` can hang on IPv6.
 
 Dev (hot reload):
 
 ```bash
-KANBAN_API_URL=http://localhost:3001 KANBAN_API_TOKEN=<token> bun run dev:mcp
+KANBAN_API_URL=http://127.0.0.1:3001 KANBAN_API_TOKEN=<token> bun run dev:mcp
 ```
 
 ## Response shape
@@ -57,6 +58,7 @@ Every tool returns JSON text:
 | `issue_move` | Column + rank; soft-warn on open blockers into done column |
 | `issue_delete` | Permanently delete issue (prefer `archived: true` when in doubt) |
 | `subtask_list` / `subtask_create` | Subtasks |
+| `attachment_list` / `attachment_create_text` | List files; create `.md`/text attachments from a string (no upload) |
 | `fetch_blockers` | Blockers summary by id or key |
 | `link_list` / `link_create` / `link_delete` | Issue links: `blocks` (cycle-checked), `relates_to` (symmetric), `duplicates` |
 | `epic_list` / `epic_get` / `epic_create` / `epic_update` / `epic_delete` | Epics (assign via `issue_create`/`issue_update` `epicId`, top-level only) |
@@ -66,13 +68,26 @@ Every tool returns JSON text:
 
 List tools accept optional `limit` (1–200) and `offset`. Use string `"null"` for unset `parentId` filters.
 
-File attachments are not exposed as MCP tools (multipart upload); use the Harbor UI or the HTTP API directly.
-
 Sprints do not exist in Harbor — work lives on board columns only.
 
 ## Auth env
 
 | Variable | Default | Role |
 |----------|---------|------|
-| `KANBAN_API_URL` | `http://localhost:3001` | API base |
+| `KANBAN_API_URL` | `http://127.0.0.1:3001` | API base (`localhost` is rewritten to `127.0.0.1`) |
 | `KANBAN_API_TOKEN` | — (required) | Bearer from Harbor → MCP tokens |
+| `KANBAN_API_TIMEOUT_MS` | `15000` | Per-request HTTP timeout |
+
+## Troubleshooting (Claude Code timeouts)
+
+1. **API must be up**: `curl -s http://127.0.0.1:3001/health` → `{"ok":true,...}`.
+2. **Use `127.0.0.1`**, not `localhost`, in `KANBAN_API_URL`.
+3. **Rebuild after pulls**: `bun install && bun run build:mcp` so `dist/` and `apps/mcp/node_modules` exist.
+4. **Token**: create a fresh one in Harbor → MCP tokens if you get `UNAUTHORIZED`.
+5. Quick smoke (from repo root):
+
+```bash
+KANBAN_API_URL=http://127.0.0.1:3001 KANBAN_API_TOKEN=<token> \
+  node apps/mcp/dist/index.js
+# then type nothing — stderr should print: [kanban-mcp] ready (API: http://127.0.0.1:3001)
+```

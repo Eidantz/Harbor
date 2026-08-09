@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `[kanban-mcp] ready (API: ${process.env.KANBAN_API_URL ?? 'http://localhost:3001'})`,
+    `[kanban-mcp] ready (API: ${api.apiBaseUrl})`,
   );
 }
 

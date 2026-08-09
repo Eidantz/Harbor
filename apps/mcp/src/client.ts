@@ -22,7 +22,25 @@ export class ApiClientError extends Error {
 export type KanbanClientOptions = {
   baseUrl: string;
   token: string;
+  /** Per-request timeout in ms (default 15000). */
+  timeoutMs?: number;
 };
+
+/**
+ * Prefer 127.0.0.1 over localhost so Node does not try IPv6 (::1) first.
+ * Docker Compose binds the API to 127.0.0.1 only — ::1 hangs until timeout.
+ */
+export function normalizeApiBaseUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'localhost') {
+      u.hostname = '127.0.0.1';
+    }
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return url.replace(/\/+$/, '');
+  }
+}
 
 function joinUrl(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/+$/, '');
@@ -47,10 +65,16 @@ function codeFromStatus(status: number, fallback?: string): string {
 export class KanbanApiClient {
   private readonly baseUrl: string;
   private readonly token: string;
+  private readonly timeoutMs: number;
 
   constructor(options: KanbanClientOptions) {
-    this.baseUrl = options.baseUrl;
+    this.baseUrl = normalizeApiBaseUrl(options.baseUrl);
     this.token = options.token;
+    this.timeoutMs = options.timeoutMs ?? 15_000;
+  }
+
+  get apiBaseUrl(): string {
+    return this.baseUrl;
   }
 
   async request<T>(
@@ -86,10 +110,20 @@ export class KanbanApiClient {
         method,
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new ApiClientError(0, 'NETWORK_ERROR', `Failed to reach API at ${this.baseUrl}: ${message}`);
+      const timedOut =
+        (err instanceof Error && err.name === 'TimeoutError') ||
+        /aborted|timeout/i.test(message);
+      throw new ApiClientError(
+        0,
+        timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
+        timedOut
+          ? `API request timed out after ${this.timeoutMs}ms (${this.baseUrl})`
+          : `Failed to reach API at ${this.baseUrl}: ${message}`,
+      );
     }
 
     const text = await response.text();
@@ -149,14 +183,22 @@ export function createClientFromEnv(): KanbanApiClient {
   const baseUrl =
     process.env.KANBAN_API_URL?.trim() ||
     process.env.API_URL?.trim() ||
-    'http://localhost:3001';
+    'http://127.0.0.1:3001';
   const token = process.env.KANBAN_API_TOKEN?.trim() || '';
+  const timeoutRaw = process.env.KANBAN_API_TIMEOUT_MS?.trim();
+  const timeoutMs = timeoutRaw ? Number(timeoutRaw) : undefined;
 
   if (!token) {
     throw new Error(
-      'Missing KANBAN_API_TOKEN. Create one in Harbor → MCP tokens and set it in the environment or .cursor/mcp.json.',
+      'Missing KANBAN_API_TOKEN. Create one in Harbor → MCP tokens and set it in the environment or Claude MCP config.',
     );
   }
 
-  return new KanbanApiClient({ baseUrl, token });
+  return new KanbanApiClient({
+    baseUrl,
+    token,
+    ...(timeoutMs && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? { timeoutMs }
+      : {}),
+  });
 }

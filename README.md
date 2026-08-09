@@ -96,7 +96,7 @@ bun run build:mcp
       "command": "node",
       "args": ["/absolute/path/to/Harbor/apps/mcp/dist/index.js"],
       "env": {
-        "KANBAN_API_URL": "http://localhost:3001",
+        "KANBAN_API_URL": "http://127.0.0.1:3001",
         "KANBAN_API_TOKEN": "<paste token from Harbor>"
       }
     }
