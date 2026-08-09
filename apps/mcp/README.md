@@ -4,13 +4,12 @@ Stdio MCP server for the local Kanban board. Talks **HTTP only** to the Nest API
 
 ## Setup
 
-1. Run the API (e.g. `pnpm docker:up` or `pnpm dev:api`) on `http://localhost:3001`.
+1. Run the API (e.g. `bun run docker:up` or `bun run dev:api`) on `http://localhost:3001`.
 2. In Harbor → **MCP tokens** → create a token and copy the plaintext.
 3. Build:
 
 ```bash
-pnpm --filter @kanban/mcp build
-# or: pnpm build:mcp
+bun run build:mcp
 ```
 
 4. Register the stdio server in any MCP client (Claude Desktop / Claude Code, Cursor, etc.) — paste the token:
@@ -31,7 +30,7 @@ Use an absolute path to `dist/index.js` when the client does not start in the re
 Dev (hot reload):
 
 ```bash
-KANBAN_API_URL=http://localhost:3001 KANBAN_API_TOKEN=<token> pnpm --filter @kanban/mcp dev
+KANBAN_API_URL=http://localhost:3001 KANBAN_API_TOKEN=<token> bun run dev:mcp
 ```
 
 ## Response shape

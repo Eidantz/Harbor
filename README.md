@@ -51,14 +51,14 @@ Browser ────────────────────────
 
 ## Quick start
 
-**Requirements:** Node.js 20+, [pnpm](https://pnpm.io), Docker
+**Requirements:** [Bun](https://bun.sh) 1.3+, Docker
 
 ```bash
 git clone git@github.com:Eidantz/Harbor.git
 cd Harbor
-pnpm install
-pnpm setup:env          # copies .env.example → .env and links apps/api/.env
-pnpm docker:up          # builds & starts db + api + web
+bun install
+bun run setup:env       # copies .env.example → .env and links apps/api/.env
+bun run docker:up       # builds & starts db + api + web
 ```
 
 | Service | URL |
@@ -69,7 +69,7 @@ pnpm docker:up          # builds & starts db + api + web
 
 On a fresh database, open the UI and **create the admin account**. After that, the same screen is sign-in. Seed data includes sample project **KAN**.
 
-Stop the stack with `pnpm docker:down`.
+Stop the stack with `bun run docker:down`.
 
 ---
 
@@ -77,12 +77,12 @@ Stop the stack with `pnpm docker:down`.
 
 Harbor exposes a **stdio MCP server** any compatible client can launch (Claude Desktop / Claude Code, Cursor, and others).
 
-1. Start Harbor (`pnpm docker:up`) and complete admin signup.
+1. Start Harbor (`bun run docker:up`) and complete admin signup.
 2. In the UI: **MCP tokens** → **Create token** (copy it once).
 3. Build the server:
 
 ```bash
-pnpm build:mcp
+bun run build:mcp
 ```
 
 4. Point your client at the server with the same command + env:
@@ -119,14 +119,14 @@ Full tool catalog: [`apps/mcp/README.md`](apps/mcp/README.md).
 Keep Postgres in Docker; run API and web on the host:
 
 ```bash
-pnpm setup:env
+bun run setup:env
 docker compose up -d db
-pnpm db:migrate:deploy
-pnpm db:seed
-pnpm dev                 # API :3001 + web :3000
+bun run db:migrate:deploy
+bun run db:seed
+bun run dev              # API :3001 + web :3000
 ```
 
-Useful scripts: `pnpm dev:api`, `pnpm dev:web`, `pnpm db:studio`, `pnpm smoke`.
+Useful scripts: `bun run dev:api`, `bun run dev:web`, `bun run db:studio`, `bun run smoke`.
 
 ---
 

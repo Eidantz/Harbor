@@ -3,7 +3,7 @@
  * Happy-path smoke against a live Kanban API (same HTTP paths the MCP uses).
  *
  * Usage (API must be up):
- *   pnpm smoke
+ *   bun run smoke
  *
  * On a fresh DB (no users) it signs up a smoke admin and mints a DB token.
  * On an existing DB set KANBAN_API_TOKEN (create one in Harbor → MCP tokens).
@@ -173,7 +173,7 @@ async function main() {
     ok('health', health.service || 'ok');
   } catch (e) {
     fail('health', e);
-    console.error('\nAPI not reachable. Start with: pnpm docker:up  or  pnpm dev:api');
+    console.error('\nAPI not reachable. Start with: bun run docker:up  or  bun run dev:api');
     process.exit(1);
   }
 
@@ -189,7 +189,7 @@ async function main() {
   try {
     const projects = await api('GET', '/api/projects');
     if (!Array.isArray(projects) || projects.length === 0) {
-      throw new Error('expected at least one project (run pnpm db:seed)');
+      throw new Error('expected at least one project (run bun run db:seed)');
     }
     project = projects.find((p) => p.key === 'KAN') || projects[0];
     ok('project_list', `${projects.length} project(s), using ${project.key}`);

@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-.pnpm-store/
 
 # Build
 dist/
@@ -24,7 +23,6 @@ apps/api/.env
 logs/
 *.log
 npm-debug.log*
-pnpm-debug.log*
 coverage/
 
 # Prisma
