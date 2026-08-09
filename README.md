@@ -5,14 +5,14 @@
 <h1 align="center">Harbor</h1>
 
 <p align="center">
-  Local-first Kanban board with a Cursor MCP server.<br />
+  Local-first Kanban board with an MCP server for any compatible client.<br />
   Run the full stack on your machine — UI, API, Postgres, and agent tools.
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-you-can-do">Features</a> ·
-  <a href="#mcp-for-cursor">MCP</a> ·
+  <a href="#mcp">MCP</a> ·
   <a href="#development">Development</a>
 </p>
 
@@ -20,18 +20,18 @@
 
 ## What is Harbor?
 
-Harbor is a **single-operator Kanban** that stays on localhost. Use the web UI to manage projects and issues, or drive the same board from Cursor through a stdio MCP server that talks to the Nest API.
+Harbor is a **single-operator Kanban** that stays on localhost. Use the web UI to manage projects and issues, or drive the same board from any MCP client (Claude, Cursor, and others) through a stdio MCP server that talks to the Nest API.
 
 ```
-Cursor ──stdio──► Harbor MCP ──HTTP Bearer──► Nest API ──► Postgres
-Browser ─────────────────────► Harbor UI ──/api──► Nest API
+MCP client ──stdio──► Harbor MCP ──HTTP Bearer──► Nest API ──► Postgres
+Browser ─────────────────────────► Harbor UI ──/api──► Nest API
 ```
 
 | Package | Path | Role |
 |---------|------|------|
 | `@kanban/api` | `apps/api` | NestJS + Prisma + OpenAPI |
 | `@kanban/web` | `apps/web` | Harbor UI (Vite + React) |
-| `@kanban/mcp` | `apps/mcp` | Cursor stdio MCP |
+| `@kanban/mcp` | `apps/mcp` | Stdio MCP server |
 
 ---
 
@@ -44,7 +44,7 @@ Browser ─────────────────────► Harbo
 - **Attachments** — multipart file upload in the issue drawer (UI/API; max 20 MB)
 - **Live updates** — board refreshes over SSE when the API or an MCP agent changes data
 - **Global search** — `Ctrl/Cmd+K` across projects
-- **Cursor MCP** — projects, columns, issues, links, blockers, epics, labels, comments, activity
+- **MCP tools** — projects, columns, issues, links, blockers, epics, labels, comments, activity
 - **Auth** — first-run admin signup, cookie sessions for the UI, Bearer MCP tokens from Harbor
 
 ---
@@ -73,18 +73,26 @@ Stop the stack with `pnpm docker:down`.
 
 ---
 
-## MCP for Cursor
+## MCP
+
+Harbor exposes a **stdio MCP server** any compatible client can launch (Claude Desktop / Claude Code, Cursor, and others).
 
 1. Start Harbor (`pnpm docker:up`) and complete admin signup.
 2. In the UI: **MCP tokens** → **Create token** (copy it once).
-3. Copy [`.cursor/mcp.json.example`](.cursor/mcp.json.example) to `.cursor/mcp.json` and paste the token:
+3. Build the server:
+
+```bash
+pnpm build:mcp
+```
+
+4. Point your client at the server with the same command + env:
 
 ```json
 {
   "mcpServers": {
-    "kanban": {
+    "harbor": {
       "command": "node",
-      "args": ["apps/mcp/dist/index.js"],
+      "args": ["/absolute/path/to/Harbor/apps/mcp/dist/index.js"],
       "env": {
         "KANBAN_API_URL": "http://localhost:3001",
         "KANBAN_API_TOKEN": "<paste token from Harbor>"
@@ -94,11 +102,13 @@ Stop the stack with `pnpm docker:down`.
 }
 ```
 
-4. Build and reload MCP in Cursor:
+| Client | Where to put the config |
+|--------|-------------------------|
+| **Claude Desktop** | Claude → Settings → Developer → Edit Config (`claude_desktop_config.json`) |
+| **Claude Code** | Project or user `.mcp.json` (same `mcpServers` shape) |
+| **Cursor** | Copy [`docs/mcp.example.json`](docs/mcp.example.json) → `.cursor/mcp.json` |
 
-```bash
-pnpm build:mcp
-```
+Use an absolute path to `apps/mcp/dist/index.js` when the client does not start in the repo root. Reload MCP after changing config.
 
 Full tool catalog: [`apps/mcp/README.md`](apps/mcp/README.md).
 
@@ -128,7 +138,7 @@ Useful scripts: `pnpm dev:api`, `pnpm dev:web`, `pnpm db:studio`, `pnpm smoke`.
 | MCP / scripts | `Authorization: Bearer <token>` from **MCP tokens** |
 
 - Compose publishes ports on `127.0.0.1` only.
-- Real secrets live in `.env` and `.cursor/mcp.json` — both are gitignored. Use `.env.example` and `.cursor/mcp.json.example` as templates.
+- Real secrets live in `.env` and local MCP config files (e.g. `.cursor/`) — gitignored. Use `.env.example` and [`docs/mcp.example.json`](docs/mcp.example.json) as templates.
 - Rotate `SESSION_SECRET` and revoke MCP tokens for anything beyond casual local use.
 
 ---

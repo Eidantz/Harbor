@@ -13,10 +13,10 @@ pnpm --filter @kanban/mcp build
 # or: pnpm build:mcp
 ```
 
-4. Cursor config (repo `.cursor/mcp.json`) — paste the token:
+4. Register the stdio server in any MCP client (Claude Desktop / Claude Code, Cursor, etc.) — paste the token:
 
 ```json
-"kanban": {
+"harbor": {
   "command": "node",
   "args": ["apps/mcp/dist/index.js"],
   "env": {
@@ -25,6 +25,8 @@ pnpm --filter @kanban/mcp build
   }
 }
 ```
+
+Use an absolute path to `dist/index.js` when the client does not start in the repo root. See the root README for client-specific config locations.
 
 Dev (hot reload):
 

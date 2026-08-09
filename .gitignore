@@ -13,11 +13,8 @@ build/
 .env.*.local
 apps/api/.env
 
-# Cursor local MCP config (contains API tokens)
-.cursor/mcp.json
-!.cursor/mcp.json.example
-
-# IDE / OS
+# IDE / OS / local editor config (may contain tokens)
+.cursor/
 .DS_Store
 .idea/
 .vscode/*

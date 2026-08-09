@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "kanban": {
+    "harbor": {
       "command": "node",
       "args": ["apps/mcp/dist/index.js"],
       "env": {
