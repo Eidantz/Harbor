@@ -12,7 +12,8 @@ services:
       # PG 18+ stores data under a versioned subdir; mount the parent path
       - postgres_data:/var/lib/postgresql
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      # Default 5433 avoids clashing with other local Postgres (e.g. Langfuse on 5432).
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kanban} -d ${POSTGRES_DB:-kanban}"]
       interval: 5s
@@ -32,7 +33,7 @@ services:
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD:-kanban}@db:5432/${POSTGRES_DB:-kanban}?schema=public
       SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3010}
       UPLOAD_DIR: /data/uploads
     volumes:
       - uploads_data:/data/uploads
@@ -49,7 +50,8 @@ services:
     depends_on:
       - api
     ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:80"
+      # Default 3010 avoids clashing with other local apps (e.g. Langfuse on 3000).
+      - "127.0.0.1:${WEB_PORT:-3010}:80"
 
 volumes:
   postgres_data:

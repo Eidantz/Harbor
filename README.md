@@ -63,11 +63,11 @@ bun run docker:up       # builds & starts db + api + web
 
 | Service | URL (defaults) |
 |---------|----------------|
-| Harbor UI | http://localhost:3000 |
+| Harbor UI | http://localhost:3010 |
 | API health | http://localhost:3001/health |
 | OpenAPI | http://localhost:3001/api/docs |
 
-Ports come from `.env` (`WEB_PORT`, `API_PORT`, `POSTGRES_PORT`). Change them if something else already binds `3000` / `5432`.
+Ports come from `.env` (`WEB_PORT`, `API_PORT`, `POSTGRES_PORT`). Defaults are `3010` / `3001` / `5433` so Harbor can sit next to stacks that already use `3000` / `5432` (e.g. Langfuse).
 
 On a fresh database, open the UI and **create the admin account**. After that, the same screen is sign-in. Seed data includes sample project **KAN**.
 
