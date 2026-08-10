@@ -1,3 +1,19 @@
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
+
+/**
+ * Under Apple Claude Code, all outbound connections (including to 127.0.0.1)
+ * must go through its local proxy — Node's global fetch ignores HTTP_PROXY/
+ * HTTPS_PROXY on its own, so without this, direct fetches get blocked (EPERM).
+ */
+const proxyUrl =
+  process.env.HTTPS_PROXY ||
+  process.env.https_proxy ||
+  process.env.HTTP_PROXY ||
+  process.env.http_proxy;
+if (proxyUrl) {
+  setGlobalDispatcher(new ProxyAgent(proxyUrl));
+}
+
 export type ApiErrorBody = {
   statusCode?: number;
   message?: string | string[];
