@@ -21,6 +21,7 @@ import {
   typeLabel,
 } from '../lib/format';
 import { useToast } from './Toast';
+import { nextLabelColor } from './LabelCell';
 import { Loading } from './Loading';
 import { MarkdownDocument } from './MarkdownDocument';
 import { PriorityBadge } from './PriorityBadge';
@@ -804,7 +805,7 @@ export function IssueDrawer(props: IssueDrawerProps) {
                           const name = String(fd.get('name') ?? '').trim();
                           if (!name) return;
                           void api
-                            .createLabel(projectId, { name })
+                            .createLabel(projectId, { name, color: nextLabelColor(labels) })
                             .then(async (label) => {
                               form.reset();
                               await api.attachLabel(issue.id, label.id);

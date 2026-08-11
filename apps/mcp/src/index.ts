@@ -18,7 +18,9 @@ async function main(): Promise<void> {
         'All responses are JSON: { ok: true, data } or { ok: false, error: { code, message, details? } }. ' +
         'Links support type "blocks" only. Prefer fetch_blockers or issue_get.blockers for blocker summaries; link_* for mutations. ' +
         'Epics are outside the board; use epic_* tools and issue_create/update epicId (top-level only). ' +
-        'Moving an issue to Done may include soft OPEN_BLOCKERS warnings.',
+        'Moving an issue to Done may include soft OPEN_BLOCKERS warnings. ' +
+        'User-defined list-table columns (text/number/date/label/person/file/checkbox) live under custom_column_* tools; ' +
+        'set per-issue cell values with custom_value_set (board_get returns customColumns and issue customValues).',
     },
   );
 

@@ -7,6 +7,9 @@ import type {
   BoardResponse,
   Comment,
   CreatedApiToken,
+  CustomColumn,
+  CustomColumnType,
+  CustomValuePayload,
   Epic,
   IssueDetail,
   IssueLinkType,
@@ -149,6 +152,7 @@ export const api = {
       theme?: ProjectTheme;
       boardLayout?: BoardLayout;
       listFields?: string[];
+      listWidths?: Record<string, number>;
     },
   ) {
     return request<Project>(`/api/projects/${projectId}`, {
@@ -352,6 +356,68 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  },
+
+  updateLabel(labelId: string, body: { name?: string; color?: string }) {
+    return request<Label>(`/api/labels/${labelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  deleteLabel(labelId: string) {
+    return request<{ ok: boolean; id: string }>(`/api/labels/${labelId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  listCustomColumns(projectId: string) {
+    return request<CustomColumn[]>(`/api/projects/${projectId}/list-columns`);
+  },
+
+  createCustomColumn(
+    projectId: string,
+    body: {
+      name: string;
+      type: CustomColumnType;
+      settings?: CustomColumn['settings'];
+    },
+  ) {
+    return request<CustomColumn>(`/api/projects/${projectId}/list-columns`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  updateCustomColumn(
+    columnId: string,
+    body: {
+      name?: string;
+      position?: number;
+      settings?: CustomColumn['settings'];
+    },
+  ) {
+    return request<CustomColumn>(`/api/list-columns/${columnId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  deleteCustomColumn(columnId: string) {
+    return request<{ ok: boolean; id: string }>(`/api/list-columns/${columnId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  setCustomValue(issueId: string, columnId: string, value: CustomValuePayload | null) {
+    return request<{ ok: boolean }>(`/api/issues/${issueId}/values/${columnId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  },
+
+  listUsers() {
+    return request<User[]>('/api/users');
   },
 
   listEpics(projectId: string) {

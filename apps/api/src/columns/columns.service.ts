@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { defaultColumnColor } from '../common/constants';
 import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateColumnDto } from './dto/create-column.dto';
@@ -72,7 +71,8 @@ export class ColumnsService {
             name: dto.name,
             position,
             isDone,
-            color: dto.color === undefined ? defaultColumnColor(position) : dto.color,
+            // null = follow the project theme's default accent for this position
+            color: dto.color ?? null,
           },
         });
       });

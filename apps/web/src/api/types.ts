@@ -5,6 +5,11 @@ export type BoardLayout = 'columns' | 'list';
 export type ListFieldId =
   | 'key'
   | 'title'
+  | 'assignee'
+  | 'epic'
+  | 'status'
+  | 'document'
+  | 'description'
   | 'priority'
   | 'humanEffort'
   | 'locEffort'
@@ -15,6 +20,11 @@ export type ListFieldId =
 export const DEFAULT_LIST_FIELDS: ListFieldId[] = [
   'key',
   'title',
+  'assignee',
+  'epic',
+  'status',
+  'document',
+  'description',
   'priority',
   'humanEffort',
   'locEffort',
@@ -71,6 +81,7 @@ export interface Project {
   theme: ProjectTheme | string;
   boardLayout: BoardLayout;
   listFields?: ListFieldId[] | string[];
+  listWidths?: Record<string, number>;
   issueCounter: number;
   createdAt: string;
   updatedAt: string;
@@ -96,6 +107,48 @@ export interface Label {
   color: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type CustomColumnType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'label'
+  | 'person'
+  | 'file'
+  | 'checkbox';
+
+export interface CustomLabelOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface CustomColumn {
+  id: string;
+  projectId: string;
+  name: string;
+  type: CustomColumnType;
+  position: number;
+  /** Type-specific config; label columns keep their options here */
+  settings: { options?: CustomLabelOption[] };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type CustomValuePayload =
+  | { text: string }
+  | { number: number }
+  | { date: string }
+  | { optionId: string }
+  | { userId: string }
+  | { attachmentId: string; filename: string }
+  | { checked: boolean };
+
+export interface IssueCustomValue {
+  issueId: string;
+  columnId: string;
+  value: CustomValuePayload;
 }
 
 export interface EpicSummary {
@@ -154,6 +207,7 @@ export interface BoardIssue {
   labels: IssueLabel[];
   epic: EpicSummary | null;
   assignee: User | null;
+  customValues?: IssueCustomValue[];
   _count: { subtasks: number; linksTo: number; linksFrom: number };
 }
 
@@ -164,6 +218,7 @@ export interface BoardColumnWithIssues extends BoardColumn {
 export interface BoardResponse {
   projectId: string;
   columns: BoardColumnWithIssues[];
+  customColumns?: CustomColumn[];
 }
 
 export interface BlockerRef {

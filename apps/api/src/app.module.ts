@@ -4,6 +4,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { AuthModule } from './auth/auth.module';
 import { ColumnsModule } from './columns/columns.module';
 import { CommentsModule } from './comments/comments.module';
+import { CustomColumnsModule } from './custom-columns/custom-columns.module';
 import { EpicsModule } from './epics/epics.module';
 import { EventsModule } from './events/events.module';
 import { HealthModule } from './health/health.module';
@@ -26,6 +27,7 @@ import { SearchModule } from './search/search.module';
     LinksModule,
     AttachmentsModule,
     LabelsModule,
+    CustomColumnsModule,
     EpicsModule,
     CommentsModule,
     ActivityModule,

@@ -5,15 +5,24 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  DEFAULT_COLUMN_COLORS,
   DEFAULT_COLUMN_NAMES,
   DEFAULT_DONE_COLUMN_NAME,
-  defaultColumnColor,
+  DEFAULT_LABELS,
 } from '../common/constants';
 import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+
+/** Keep only finite numeric widths, clamped to a sane pixel range. */
+function sanitizeListWidths(raw: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    out[key] = Math.round(Math.min(1200, Math.max(60, value)));
+  }
+  return out;
+}
 
 @Injectable()
 export class ProjectsService {
@@ -60,8 +69,12 @@ export class ProjectsService {
               name,
               position,
               isDone: name === DEFAULT_DONE_COLUMN_NAME,
-              color: DEFAULT_COLUMN_COLORS[position] ?? defaultColumnColor(position),
+              // null = theme-default accent, resolved client-side per theme
+              color: null,
             })),
+          },
+          labels: {
+            create: DEFAULT_LABELS.map((l) => ({ name: l.name, color: l.color })),
           },
         },
         include: { columns: { orderBy: { position: 'asc' } } },
@@ -90,6 +103,9 @@ export class ProjectsService {
           : {}),
         ...(dto.listFields !== undefined
           ? { listFields: dto.listFields }
+          : {}),
+        ...(dto.listWidths !== undefined
+          ? { listWidths: sanitizeListWidths(dto.listWidths) }
           : {}),
       },
       include: { columns: { orderBy: { position: 'asc' } } },
@@ -120,31 +136,38 @@ export class ProjectsService {
 
   async getBoard(projectId: string) {
     await this.get(projectId);
-    const columns = await this.prisma.boardColumn.findMany({
-      where: { projectId },
-      orderBy: { position: 'asc' },
-      include: {
-        issues: {
-          where: {
-            parentId: null,
-            archivedAt: null,
-          },
-          orderBy: { rank: 'asc' },
-          include: {
-            labels: { include: { label: true } },
-            epic: { select: { id: true, name: true, color: true } },
-            _count: {
-              select: {
-                subtasks: true,
-                linksTo: { where: { type: 'blocks' } },
-                linksFrom: { where: { type: 'blocks' } },
-              },
+    const [columns, customColumns] = await Promise.all([
+      this.prisma.boardColumn.findMany({
+        where: { projectId },
+        orderBy: { position: 'asc' },
+        include: {
+          issues: {
+            where: {
+              parentId: null,
+              archivedAt: null,
             },
-            assignee: { select: { id: true, email: true } },
+            orderBy: { rank: 'asc' },
+            include: {
+              labels: { include: { label: true } },
+              epic: { select: { id: true, name: true, color: true } },
+              customValues: true,
+              _count: {
+                select: {
+                  subtasks: true,
+                  linksTo: { where: { type: 'blocks' } },
+                  linksFrom: { where: { type: 'blocks' } },
+                },
+              },
+              assignee: { select: { id: true, email: true } },
+            },
           },
         },
-      },
-    });
-    return { projectId, columns };
+      }),
+      this.prisma.customColumn.findMany({
+        where: { projectId },
+        orderBy: { position: 'asc' },
+      }),
+    ]);
+    return { projectId, columns, customColumns };
   }
 }

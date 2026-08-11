@@ -3,10 +3,11 @@ import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 
 const prisma = new PrismaClient();
 
+// color null = follow the project theme's default accent for the position
 const DEFAULT_COLUMNS = [
-  { name: 'To Do', isDone: false, color: '#7aa2f7' },
-  { name: 'In Progress', isDone: false, color: '#e0af68' },
-  { name: 'Done', isDone: true, color: '#9ece6a' },
+  { name: 'To Do', isDone: false, color: null },
+  { name: 'In Progress', isDone: false, color: null },
+  { name: 'Done', isDone: true, color: null },
 ] as const;
 
 function isValidRank(rank: string): boolean {
@@ -64,6 +65,10 @@ async function createSampleData(userId: string | null) {
 
   const labels = await Promise.all(
     [
+      // Monday-style defaults (kept in sync with DEFAULT_LABELS in src/common/constants.ts)
+      { name: 'Done', color: '#00C875' },
+      { name: 'Working on it', color: '#FDAB3D' },
+      { name: 'Stuck', color: '#DF2F4A' },
       { name: 'frontend', color: '#0D9488' },
       { name: 'backend', color: '#2563EB' },
       { name: 'docs', color: '#CA8A04' },

@@ -40,6 +40,16 @@ enum BoardLayout {
   list
 }
 
+enum CustomColumnType {
+  text
+  number
+  date
+  label
+  person
+  file
+  checkbox
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -81,6 +91,8 @@ model Project {
   boardLayout  BoardLayout @default(columns)
   /// Visible Monday-list table field ids (JSON string array)
   listFields   Json        @default("[\"key\",\"title\",\"priority\",\"humanEffort\",\"locEffort\",\"type\",\"labels\",\"blockers\"]")
+  /// Per-column pixel widths for the list table (JSON map of field/column id -> px)
+  listWidths   Json        @default("{}")
   issueCounter Int         @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -90,6 +102,7 @@ model Project {
   labels         Label[]
   epics          Epic[]
   activityEvents ActivityEvent[]
+  customColumns  CustomColumn[]
 
   @@index([name])
 }
@@ -168,10 +181,11 @@ model Issue {
   parent    Issue?       @relation("IssueSubtasks", fields: [parentId], references: [id], onDelete: Cascade)
   subtasks  Issue[]      @relation("IssueSubtasks")
   assignee  User?        @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  labels      IssueLabel[]
-  comments    Comment[]
-  activity    ActivityEvent[]
-  attachments Attachment[]
+  labels       IssueLabel[]
+  comments     Comment[]
+  activity     ActivityEvent[]
+  attachments  Attachment[]
+  customValues IssueCustomValue[]
 
   linksFrom IssueLink[] @relation("LinkSource")
   linksTo   IssueLink[] @relation("LinkTarget")
@@ -185,6 +199,39 @@ model Issue {
   @@index([assigneeId])
   @@index([projectId, columnId, rank])
   @@index([projectId, archivedAt])
+}
+
+/// User-defined list-table column (Monday-style custom field).
+model CustomColumn {
+  id        String           @id @default(cuid())
+  projectId String
+  name      String
+  type      CustomColumnType
+  position  Int
+  /// Type-specific config, e.g. label options [{ id, name, color }]
+  settings  Json             @default("{}")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  project Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  values  IssueCustomValue[]
+
+  @@index([projectId])
+  @@index([projectId, position])
+}
+
+/// Per-issue value for a custom column. Value shape depends on column type:
+/// { text } | { number } | { date } | { optionId } | { userId } | { attachmentId, filename } | { checked }
+model IssueCustomValue {
+  issueId  String
+  columnId String
+  value    Json
+
+  issue  Issue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  column CustomColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, columnId])
+  @@index([columnId])
 }
 
 model IssueLink {

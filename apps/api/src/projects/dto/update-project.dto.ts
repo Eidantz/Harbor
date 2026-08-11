@@ -5,6 +5,7 @@ import {
   IsArray,
   IsEnum,
   IsIn,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -53,4 +54,13 @@ export class UpdateProjectDto {
   @ArrayUnique()
   @IsIn([...LIST_FIELD_IDS], { each: true })
   listFields?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'List-table column pixel widths, keyed by built-in field id or custom column id',
+    example: { title: 320, dueDate: 120 },
+  })
+  @IsOptional()
+  @IsObject()
+  listWidths?: Record<string, number>;
 }

@@ -9,7 +9,7 @@ import { TypeBadge } from './TypeBadge';
 
 type CardIssue = BoardIssue | IssueListItem;
 
-export type OpenIssueOptions = { tab?: 'links' };
+export type OpenIssueOptions = { tab?: 'links' | 'details' };
 
 function labelsOf(issue: CardIssue) {
   return issue.labels?.map((l) => l.label) ?? [];

@@ -52,6 +52,11 @@ export const HexColorSchema = z
 export const ListFieldSchema = z.enum([
   'key',
   'title',
+  'assignee',
+  'epic',
+  'status',
+  'document',
+  'description',
   'priority',
   'humanEffort',
   'locEffort',
@@ -66,3 +71,51 @@ export const NullableIdFilterSchema = z
   .string()
   .min(1)
   .describe('Resource id, or the literal string "null" for unset/top-level');
+
+export const CustomColumnIdSchema = z
+  .string()
+  .min(1)
+  .describe('Custom list-table column id');
+
+export const CustomColumnTypeSchema = z
+  .enum(['text', 'number', 'date', 'label', 'person', 'file', 'checkbox'])
+  .describe('Custom column type');
+
+export const CustomColumnSettingsSchema = z
+  .object({
+    options: z
+      .array(
+        z.object({
+          id: z.string().min(1).describe('Stable option id (any unique string)'),
+          name: z.string().min(1).max(40),
+          color: HexColorSchema,
+        }),
+      )
+      .optional()
+      .describe('Colored options for label-type columns'),
+  })
+  .describe('Type-specific config; label columns keep their colored options here');
+
+/** Cell value; shape must match the column type. Null clears the cell. */
+export const CustomValueSchema = z
+  .union([
+    z.object({ text: z.string().max(2000) }).describe('text column'),
+    z.object({ number: z.number() }).describe('number column'),
+    z.object({ date: z.string() }).describe('date column (ISO 8601)'),
+    z.object({ optionId: z.string().min(1) }).describe('label column (option id)'),
+    z.object({ userId: z.string().min(1) }).describe('person column'),
+    z
+      .object({ attachmentId: z.string().min(1), filename: z.string().min(1) })
+      .describe('file column (existing attachment)'),
+    z.object({ checked: z.boolean() }).describe('checkbox column'),
+  ])
+  .nullable()
+  .describe(
+    'Value matching the column type: { text } | { number } | { date } | { optionId } | { userId } | { attachmentId, filename } | { checked }. Send null to clear.',
+  );
+
+export const ListWidthsSchema = z
+  .record(z.number().min(60).max(1200))
+  .describe(
+    'List-table column pixel widths keyed by built-in field id or custom column id',
+  );

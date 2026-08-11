@@ -34,3 +34,5 @@ docker-data/
 
 # Uploaded attachments (local dev; Docker uses a named volume)
 apps/api/uploads/
+*.png
+*.html

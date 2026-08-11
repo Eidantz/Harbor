@@ -3,6 +3,7 @@ import {
   DragOverlay,
   PointerSensor,
   closestCorners,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -27,22 +28,39 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import type {
+  BoardColumn,
   BoardColumnWithIssues,
   BoardIssue,
   BoardLayout,
+  CustomColumn,
+  CustomColumnType,
+  CustomValuePayload,
+  Epic,
   IssueListItem,
   IssuePriority,
   IssueType,
+  Label,
   ListFieldId,
   ProjectTheme,
+  User,
 } from '../api/types';
 import { ApiError, DEFAULT_LIST_FIELDS } from '../api/types';
 import { ColorPicker } from '../components/ColorPicker';
+import { CustomCell, type CustomCellHandlers } from '../components/CustomCell';
 import { EpicBadge } from '../components/EpicBadge';
+import { LabelCell, nextLabelName, type LabelActions } from '../components/LabelCell';
+import {
+  AddColumnMenu,
+  COLUMN_TYPE_OPTIONS,
+  HeaderMenu,
+  ResizeHandle,
+} from '../components/ListHeaderControls';
+import { PickerCell } from '../components/PickerCell';
 import { IssueCard, IssueCardOverlay, type OpenIssueOptions } from '../components/IssueCard';
 import { IssueDrawer, type DrawerTab } from '../components/IssueDrawer';
 import { EmptyState, Loading } from '../components/Loading';
@@ -60,12 +78,18 @@ import {
   THEME_LABELS,
   applyDocumentTheme,
   isProjectTheme,
+  themeColumnColor,
 } from '../theme/themes';
 import type { ProjectContext } from './ProjectLayout';
 
 const LIST_FIELD_OPTIONS: { id: ListFieldId; label: string }[] = [
   { id: 'key', label: 'Key' },
   { id: 'title', label: 'Title' },
+  { id: 'assignee', label: 'Owner' },
+  { id: 'epic', label: 'Epic' },
+  { id: 'status', label: 'Status' },
+  { id: 'document', label: 'Markdown' },
+  { id: 'description', label: 'Description' },
   { id: 'priority', label: 'Priority' },
   { id: 'humanEffort', label: 'Human (h)' },
   { id: 'locEffort', label: 'LOC' },
@@ -74,6 +98,129 @@ const LIST_FIELD_OPTIONS: { id: ListFieldId; label: string }[] = [
   { id: 'labels', label: 'Labels' },
   { id: 'blockers', label: 'Blockers' },
 ];
+
+/** Default pixel widths for built-in fields (used until the user resizes). */
+const DEFAULT_FIELD_WIDTHS: Record<ListFieldId, number> = {
+  key: 90,
+  title: 320,
+  assignee: 80,
+  epic: 150,
+  status: 150,
+  document: 100,
+  description: 220,
+  priority: 130,
+  humanEffort: 100,
+  locEffort: 90,
+  dueDate: 140,
+  type: 90,
+  labels: 170,
+  blockers: 100,
+};
+
+/** Default pixel widths per custom column type. */
+const DEFAULT_TYPE_WIDTHS: Record<CustomColumnType, number> = {
+  text: 200,
+  number: 110,
+  date: 140,
+  label: 150,
+  person: 90,
+  file: 170,
+  checkbox: 80,
+};
+
+const ADD_COLUMN_WIDTH = 44;
+const SELECT_COLUMN_WIDTH = 52;
+
+/** Everything the list table needs for custom columns, resizing, selection. */
+type ListTableExtras = {
+  customColumns: CustomColumn[];
+  users: User[];
+  customHandlers: CustomCellHandlers;
+  widths: Record<string, number>;
+  onLiveWidth: (id: string, w: number) => void;
+  onCommitWidth: (id: string, w: number) => void;
+  onAddColumn: (type: CustomColumnType) => void;
+  onRenameCustomColumn: (columnId: string, name: string) => Promise<void>;
+  onDeleteCustomColumn: (column: CustomColumn) => Promise<void>;
+  onHideField: (id: ListFieldId) => void;
+  selectedIds: ReadonlySet<string>;
+  onToggleSelect: (issueId: string, selected: boolean) => void;
+  onToggleSelectMany: (issueIds: string[], selected: boolean) => void;
+};
+
+/** Section header checkbox with indeterminate support. */
+function SectionSelectAll({
+  issueIds,
+  selectedIds,
+  onToggle,
+}: {
+  issueIds: string[];
+  selectedIds: ReadonlySet<string>;
+  onToggle: (issueIds: string[], selected: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const selectedCount = issueIds.filter((id) => selectedIds.has(id)).length;
+  const all = issueIds.length > 0 && selectedCount === issueIds.length;
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = selectedCount > 0 && !all;
+    }
+  }, [selectedCount, all]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="monday-checkbox"
+      checked={all}
+      disabled={issueIds.length === 0}
+      aria-label="Select all issues in this section"
+      onChange={(e) => onToggle(issueIds, e.target.checked)}
+    />
+  );
+}
+
+/**
+ * Draggable list row: drag starts from the grip in the select cell only, so
+ * inputs and pickers inside the row keep working normally.
+ */
+function DraggableIssueRow({
+  issue,
+  selected,
+  children,
+}: {
+  issue: BoardIssue;
+  selected: boolean;
+  children: (grip: ReactNode) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `row-${issue.id}`,
+    data: { type: 'list-row', issueId: issue.id },
+  });
+
+  const grip = (
+    <button
+      type="button"
+      className="row-grip"
+      title="Drag to move"
+      aria-label={`Drag ${issue.key}`}
+      {...attributes}
+      {...listeners}
+    >
+      ⋮⋮
+    </button>
+  );
+
+  return (
+    <tr
+      ref={setNodeRef}
+      className={`${selected ? 'is-selected' : ''}${isDragging ? ' is-row-dragging' : ''}`}
+    >
+      {children(grip)}
+    </tr>
+  );
+}
 
 function normalizeListFields(raw: ProjectContext['project']['listFields']): ListFieldId[] {
   const allowed = new Set<string>(DEFAULT_LIST_FIELDS);
@@ -201,11 +348,25 @@ const TYPE_RANK: Record<IssueType, number> = {
 function ListIssueTable({
   column,
   fields,
+  labels,
+  labelActions,
+  epics,
+  allColumns,
+  extras,
+  onMoveColumn,
+  onSetEpic,
   onOpen,
   onPatchIssue,
 }: {
   column: BoardColumnWithIssues;
   fields: ListFieldId[];
+  labels: Label[];
+  labelActions: LabelActions;
+  epics: Epic[];
+  allColumns: BoardColumn[];
+  extras: ListTableExtras;
+  onMoveColumn: (issueId: string, columnId: string) => Promise<void>;
+  onSetEpic: (issueId: string, epicId: string | null) => Promise<void>;
   onOpen: (id: string, options?: OpenIssueOptions) => void;
   onPatchIssue: (
     issueId: string,
@@ -214,12 +375,15 @@ function ListIssueTable({
       humanEffort?: number | null;
       locEffort?: number | null;
       dueDate?: string | null;
+      description?: string | null;
     },
   ) => Promise<void>;
 }) {
   const show = (id: ListFieldId) => fields.includes(id);
   const [sortKey, setSortKey] = useState<ListSortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   const toggleSort = (key: ListSortKey) => {
     if (sortKey === key) {
@@ -262,52 +426,180 @@ function ListIssueTable({
     });
   }, [column.issues, sortKey, sortDir]);
 
-  const sortHeader = (key: ListSortKey, label: string) => (
-    <th>
+  const SORTABLE_FIELDS: Partial<Record<ListFieldId, ListSortKey>> = {
+    key: 'key',
+    title: 'title',
+    priority: 'priority',
+    humanEffort: 'humanEffort',
+    locEffort: 'locEffort',
+    dueDate: 'dueDate',
+    type: 'type',
+  };
+
+  const visibleFields = LIST_FIELD_OPTIONS.filter((o) => show(o.id));
+  const widthOfField = (id: ListFieldId) =>
+    extras.widths[id] ?? DEFAULT_FIELD_WIDTHS[id];
+  const widthOfCustom = (col: CustomColumn) =>
+    extras.widths[col.id] ?? DEFAULT_TYPE_WIDTHS[col.type];
+  const totalWidth =
+    SELECT_COLUMN_WIDTH +
+    visibleFields.reduce((sum, f) => sum + widthOfField(f.id), 0) +
+    extras.customColumns.reduce((sum, c) => sum + widthOfCustom(c), 0) +
+    ADD_COLUMN_WIDTH;
+  const columnCount = visibleFields.length + extras.customColumns.length + 2;
+  const sectionIssueIds = sortedIssues.map((i) => i.id);
+
+  const headerLabel = (id: ListFieldId, label: string) => {
+    const sortable = SORTABLE_FIELDS[id];
+    if (!sortable) return <span className="monday-th-label">{label}</span>;
+    return (
       <button
         type="button"
         className="monday-th-btn"
-        onClick={() => toggleSort(key)}
+        onClick={() => toggleSort(sortable)}
         aria-label={`Sort by ${label}`}
       >
         {label}
-        {sortKey === key ? (
+        {sortKey === sortable ? (
           <span className="monday-sort-indicator" aria-hidden>
             {sortDir === 'asc' ? '▲' : '▼'}
           </span>
         ) : null}
       </button>
-    </th>
-  );
+    );
+  };
+
+  const commitRenameColumn = (col: CustomColumn) => {
+    const next = renameDraft.trim();
+    setRenamingId(null);
+    if (!next || next === col.name) return;
+    void extras.onRenameCustomColumn(col.id, next);
+  };
 
   return (
     <div className="monday-table-wrap">
-      <table className="monday-table">
+      <table className="monday-table" style={{ width: totalWidth }}>
+        <colgroup>
+          <col style={{ width: SELECT_COLUMN_WIDTH }} />
+          {visibleFields.map((f) => (
+            <col key={f.id} style={{ width: widthOfField(f.id) }} />
+          ))}
+          {extras.customColumns.map((c) => (
+            <col key={c.id} style={{ width: widthOfCustom(c) }} />
+          ))}
+          <col style={{ width: ADD_COLUMN_WIDTH }} />
+        </colgroup>
         <thead>
           <tr>
-            {show('key') ? sortHeader('key', 'Key') : null}
-            {show('title') ? sortHeader('title', 'Title') : null}
-            {show('priority') ? sortHeader('priority', 'Priority') : null}
-            {show('humanEffort') ? sortHeader('humanEffort', 'Human (h)') : null}
-            {show('locEffort') ? sortHeader('locEffort', 'LOC') : null}
-            {show('dueDate') ? sortHeader('dueDate', 'Due') : null}
-            {show('type') ? sortHeader('type', 'Type') : null}
-            {show('labels') ? <th>Labels</th> : null}
-            {show('blockers') ? <th>Blockers</th> : null}
+            <th className="monday-th monday-th-select">
+              <SectionSelectAll
+                issueIds={sectionIssueIds}
+                selectedIds={extras.selectedIds}
+                onToggle={extras.onToggleSelectMany}
+              />
+            </th>
+            {visibleFields.map((f) => (
+              <th key={f.id} className="monday-th">
+                <div className="monday-th-inner">
+                  {headerLabel(f.id, f.label)}
+                  {f.id !== 'title' ? (
+                    <HeaderMenu
+                      ariaLabel={`${f.label} column menu`}
+                      items={[
+                        { label: 'Hide column', onClick: () => extras.onHideField(f.id) },
+                      ]}
+                    />
+                  ) : null}
+                </div>
+                <ResizeHandle
+                  width={widthOfField(f.id)}
+                  onLiveResize={(w) => extras.onLiveWidth(f.id, w)}
+                  onCommit={(w) => extras.onCommitWidth(f.id, w)}
+                />
+              </th>
+            ))}
+            {extras.customColumns.map((c) => (
+              <th key={c.id} className="monday-th">
+                <div className="monday-th-inner">
+                  {renamingId === c.id ? (
+                    <input
+                      className="monday-th-rename"
+                      value={renameDraft}
+                      autoFocus
+                      maxLength={60}
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      onBlur={() => commitRenameColumn(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitRenameColumn(c);
+                        } else if (e.key === 'Escape') {
+                          setRenamingId(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="monday-th-label" title={c.name}>
+                      {c.name}
+                    </span>
+                  )}
+                  <HeaderMenu
+                    ariaLabel={`${c.name} column menu`}
+                    items={[
+                      {
+                        label: 'Rename',
+                        onClick: () => {
+                          setRenameDraft(c.name);
+                          setRenamingId(c.id);
+                        },
+                      },
+                      {
+                        label: 'Delete column',
+                        danger: true,
+                        onClick: () => void extras.onDeleteCustomColumn(c),
+                      },
+                    ]}
+                  />
+                </div>
+                <ResizeHandle
+                  width={widthOfCustom(c)}
+                  onLiveResize={(w) => extras.onLiveWidth(c.id, w)}
+                  onCommit={(w) => extras.onCommitWidth(c.id, w)}
+                />
+              </th>
+            ))}
+            <th className="monday-th monday-th-add">
+              <AddColumnMenu onAdd={extras.onAddColumn} />
+            </th>
           </tr>
         </thead>
         <tbody>
           {sortedIssues.length === 0 ? (
             <tr>
-              <td colSpan={Math.max(fields.length, 1)} className="muted">
+              <td colSpan={columnCount} className="muted">
                 No issues
               </td>
             </tr>
           ) : (
             sortedIssues.map((issue) => {
               const blocked = issue._count?.linksTo ?? 0;
+              const selected = extras.selectedIds.has(issue.id);
               return (
-                <tr key={issue.id}>
+                <DraggableIssueRow key={issue.id} issue={issue} selected={selected}>
+                  {(grip) => (
+                    <>
+                  <td className="monday-cell-select">
+                    <span className="select-cell-inner">
+                      {grip}
+                      <input
+                        type="checkbox"
+                        className="monday-checkbox"
+                        checked={selected}
+                        aria-label={`Select ${issue.key}`}
+                        onChange={(e) => extras.onToggleSelect(issue.id, e.target.checked)}
+                      />
+                    </span>
+                  </td>
                   {show('key') ? (
                     <td>
                       <span className="issue-key">{issue.key}</span>
@@ -323,8 +615,87 @@ function ListIssueTable({
                         >
                           {issue.title}
                         </button>
-                        {issue.epic ? <EpicBadge epic={issue.epic} /> : null}
+                        {issue.epic && !show('epic') ? <EpicBadge epic={issue.epic} /> : null}
                       </div>
+                    </td>
+                  ) : null}
+                  {show('assignee') ? (
+                    <td>
+                      {issue.assignee ? (
+                        <span className="owner-avatar" title={issue.assignee.email}>
+                          {issue.assignee.email.slice(0, 1).toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="owner-avatar empty" title="Unassigned" aria-hidden>
+                          ●
+                        </span>
+                      )}
+                    </td>
+                  ) : null}
+                  {show('epic') ? (
+                    <td className="monday-cell-labels">
+                      <PickerCell
+                        value={issue.epic?.id ?? null}
+                        options={epics.map((e) => ({
+                          id: e.id,
+                          name: e.name,
+                          color: e.color,
+                        }))}
+                        ariaLabel={`Epic for ${issue.key}`}
+                        clearLabel="Remove from epic"
+                        onSelect={(id) => void onSetEpic(issue.id, id)}
+                      />
+                    </td>
+                  ) : null}
+                  {show('status') ? (
+                    <td className="monday-cell-labels">
+                      <PickerCell
+                        value={issue.columnId}
+                        options={allColumns.map((c) => ({
+                          id: c.id,
+                          name: c.name,
+                          color: c.color,
+                        }))}
+                        ariaLabel={`Status for ${issue.key}`}
+                        onSelect={(id) => {
+                          if (id) void onMoveColumn(issue.id, id);
+                        }}
+                      />
+                    </td>
+                  ) : null}
+                  {show('document') ? (
+                    <td>
+                      {issue.document ? (
+                        <button
+                          type="button"
+                          className="doc-chip"
+                          title="Open document"
+                          aria-label={`Open document for ${issue.key}`}
+                          onClick={() => onOpen(issue.id, { tab: 'details' })}
+                        >
+                          📄
+                        </button>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  ) : null}
+                  {show('description') ? (
+                    <td>
+                      <input
+                        className="monday-cell-input monday-description-input"
+                        type="text"
+                        placeholder="—"
+                        maxLength={2000}
+                        defaultValue={issue.description ?? ''}
+                        key={`${issue.id}-d-${issue.description ?? 'x'}`}
+                        aria-label={`Description for ${issue.key}`}
+                        onBlur={(e) => {
+                          const next = e.target.value.trim() || null;
+                          if (next === (issue.description ?? null)) return;
+                          void onPatchIssue(issue.id, { description: next });
+                        }}
+                      />
                     </td>
                   ) : null}
                   {show('priority') ? (
@@ -412,18 +783,8 @@ function ListIssueTable({
                     </td>
                   ) : null}
                   {show('labels') ? (
-                    <td>
-                      <div className="monday-labels">
-                        {issue.labels.map((l) => (
-                          <span
-                            key={l.labelId}
-                            className="label-chip"
-                            style={{ ['--label-color' as string]: l.label.color }}
-                          >
-                            {l.label.name}
-                          </span>
-                        ))}
-                      </div>
+                    <td className="monday-cell-labels">
+                      <LabelCell issue={issue} labels={labels} actions={labelActions} />
                     </td>
                   ) : null}
                   {show('blockers') ? (
@@ -441,7 +802,27 @@ function ListIssueTable({
                       )}
                     </td>
                   ) : null}
-                </tr>
+                  {extras.customColumns.map((c) => (
+                    <td
+                      key={c.id}
+                      className={
+                        c.type === 'label' || c.type === 'person'
+                          ? 'monday-cell-labels'
+                          : undefined
+                      }
+                    >
+                      <CustomCell
+                        issue={issue}
+                        column={c}
+                        users={extras.users}
+                        handlers={extras.customHandlers}
+                      />
+                    </td>
+                  ))}
+                  <td className="monday-td-add" aria-hidden />
+                    </>
+                  )}
+                </DraggableIssueRow>
               );
             })
           )}
@@ -453,9 +834,17 @@ function ListIssueTable({
 
 function ColumnDrop({
   column,
+  accent,
   layout,
   collapsed,
   listFields,
+  labels,
+  labelActions,
+  epics,
+  allColumns,
+  extras,
+  onMoveColumn,
+  onSetEpic,
   onToggleCollapse,
   onOpen,
   onRename,
@@ -466,9 +855,18 @@ function ColumnDrop({
   canDelete,
 }: {
   column: BoardColumnWithIssues;
+  /** Effective accent: stored color, or the theme default for its position. */
+  accent: string;
   layout: BoardLayout;
   collapsed?: boolean;
   listFields: ListFieldId[];
+  labels: Label[];
+  labelActions: LabelActions;
+  epics: Epic[];
+  allColumns: BoardColumn[];
+  extras: ListTableExtras;
+  onMoveColumn: (issueId: string, columnId: string) => Promise<void>;
+  onSetEpic: (issueId: string, epicId: string | null) => Promise<void>;
   onToggleCollapse?: () => void;
   onOpen: (id: string, options?: OpenIssueOptions) => void;
   onRename: (columnId: string, name: string) => Promise<void>;
@@ -482,6 +880,7 @@ function ColumnDrop({
       humanEffort?: number | null;
       locEffort?: number | null;
       dueDate?: string | null;
+      description?: string | null;
     },
   ) => Promise<void>;
   canDelete: boolean;
@@ -555,7 +954,7 @@ function ColumnDrop({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.55 : 1,
-    ...(column.color ? { ['--col-accent' as string]: column.color } : {}),
+    ['--col-accent' as string]: accent,
   };
 
   return (
@@ -608,7 +1007,7 @@ function ColumnDrop({
         </div>
         <div className="column-actions">
           <ColorPicker
-            value={column.color}
+            value={column.color ?? accent}
             disabled={busy}
             onChange={(color) => void onColorChange(column.id, color)}
           />
@@ -628,6 +1027,13 @@ function ColumnDrop({
             <ListIssueTable
               column={column}
               fields={listFields}
+              labels={labels}
+              labelActions={labelActions}
+              epics={epics}
+              allColumns={allColumns}
+              extras={extras}
+              onMoveColumn={onMoveColumn}
+              onSetEpic={onSetEpic}
               onOpen={onOpen}
               onPatchIssue={onPatchIssue}
             />
@@ -736,6 +1142,13 @@ export function BoardPage() {
       : undefined;
 
   const [columns, setColumns] = useState<BoardColumnWithIssues[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [draggingRowIds, setDraggingRowIds] = useState<string[] | null>(null);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [widths, setWidths] = useState<Record<string, number>>(
+    () => project.listWidths ?? {},
+  );
   const [loading, setLoading] = useState(true);
   const [activeIssue, setActiveIssue] = useState<BoardIssue | null>(null);
   const [draggingColumn, setDraggingColumn] = useState(false);
@@ -754,6 +1167,20 @@ export function BoardPage() {
 
   const layout: BoardLayout = project.boardLayout === 'list' ? 'list' : 'columns';
   const themeValue = isProjectTheme(project.theme) ? project.theme : DEFAULT_THEME;
+
+  // Columns with a stored color keep it in every theme; null means "follow
+  // the theme" and resolves to the current scheme's palette by position.
+  const resolvedColumns = useMemo(
+    () =>
+      columns.map((c, i) => ({
+        ...c,
+        color: c.color ?? themeColumnColor(themeValue, i),
+      })),
+    [columns, themeValue],
+  );
+  const columnAccent = (columnId: string) =>
+    resolvedColumns.find((c) => c.id === columnId)?.color ??
+    themeColumnColor(themeValue, 0);
   const listFields = useMemo(
     () => normalizeListFields(project.listFields),
     [project.listFields],
@@ -769,6 +1196,7 @@ export function BoardPage() {
       try {
         const board = await api.getBoard(project.id);
         setColumns(board.columns);
+        setCustomColumns(board.customColumns ?? []);
       } catch (err) {
         if (!options?.silent) {
           toast.push(err instanceof ApiError ? err.message : 'Failed to load board', 'error');
@@ -783,6 +1211,25 @@ export function BoardPage() {
   useEffect(() => {
     void loadBoard();
   }, [loadBoard]);
+
+  useEffect(() => {
+    api.listUsers().then(setUsers).catch(() => setUsers([]));
+  }, []);
+
+  // Escape clears the row selection (list view).
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedIds(new Set());
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedIds.size]);
+
+  // Adopt server-side widths when switching projects (or after a save).
+  useEffect(() => {
+    setWidths(project.listWidths ?? {});
+  }, [project.id]);
 
   // Live updates: refresh (debounced, silently) whenever the server reports a
   // board change — e.g. another tab or an MCP agent mutating this project.
@@ -925,6 +1372,7 @@ export function BoardPage() {
     theme?: ProjectTheme;
     boardLayout?: BoardLayout;
     listFields?: string[];
+    listWidths?: Record<string, number>;
   }) => {
     setSavingPrefs(true);
     try {
@@ -1025,6 +1473,7 @@ export function BoardPage() {
       humanEffort?: number | null;
       locEffort?: number | null;
       dueDate?: string | null;
+      description?: string | null;
     },
   ) => {
     const prev = columns;
@@ -1042,20 +1491,321 @@ export function BoardPage() {
     }
   };
 
+  const onMoveToColumn = async (issueId: string, columnId: string) => {
+    const prev = columns;
+    setColumns((cols) => {
+      const next = cols.map((c) => ({ ...c, issues: [...c.issues] }));
+      const source = next.find((c) => c.issues.some((i) => i.id === issueId));
+      const dest = next.find((c) => c.id === columnId);
+      if (!source || !dest || source.id === dest.id) return cols;
+      const idx = source.issues.findIndex((i) => i.id === issueId);
+      const [moved] = source.issues.splice(idx, 1);
+      moved.columnId = columnId;
+      dest.issues.push(moved);
+      return next;
+    });
+    try {
+      const result = await api.moveIssue(issueId, { columnId });
+      for (const w of result.warnings) toast.push(w.message, 'warning');
+      await loadBoard({ silent: true });
+    } catch (err) {
+      setColumns(prev);
+      toast.push(err instanceof ApiError ? err.message : 'Move failed', 'error');
+    }
+  };
+
+  const onSetEpic = async (issueId: string, epicId: string | null) => {
+    const prev = columns;
+    const epic = epicId ? epics.find((e) => e.id === epicId) ?? null : null;
+    setColumns((cols) =>
+      cols.map((c) => ({
+        ...c,
+        issues: c.issues.map((i) =>
+          i.id === issueId
+            ? {
+                ...i,
+                epicId,
+                epic: epic ? { id: epic.id, name: epic.name, color: epic.color } : null,
+              }
+            : i,
+        ),
+      })),
+    );
+    try {
+      await api.updateIssue(issueId, { epicId });
+    } catch (err) {
+      setColumns(prev);
+      toast.push(err instanceof ApiError ? err.message : 'Epic update failed', 'error');
+    }
+  };
+
+  const labelActions: LabelActions = {
+    toggle: async (issueId, label, attach) => {
+      const prev = columns;
+      setColumns((cols) =>
+        cols.map((c) => ({
+          ...c,
+          issues: c.issues.map((i) => {
+            if (i.id !== issueId) return i;
+            const nextLabels = attach
+              ? [...i.labels, { issueId, labelId: label.id, label }]
+              : i.labels.filter((l) => l.labelId !== label.id);
+            return { ...i, labels: nextLabels };
+          }),
+        })),
+      );
+      try {
+        if (attach) await api.attachLabel(issueId, label.id);
+        else await api.detachLabel(issueId, label.id);
+      } catch (err) {
+        setColumns(prev);
+        toast.push(err instanceof ApiError ? err.message : 'Label update failed', 'error');
+      }
+    },
+    create: async (name, color) => {
+      try {
+        const label = await api.createLabel(project.id, { name, color });
+        await reloadMeta();
+        return label;
+      } catch (err) {
+        toast.push(err instanceof ApiError ? err.message : 'Create label failed', 'error');
+        return null;
+      }
+    },
+    update: async (labelId, patch) => {
+      try {
+        await api.updateLabel(labelId, patch);
+        await Promise.all([reloadMeta(), loadBoard({ silent: true })]);
+      } catch (err) {
+        toast.push(err instanceof ApiError ? err.message : 'Label update failed', 'error');
+      }
+    },
+    remove: async (label) => {
+      if (!confirm(`Delete label "${label.name}"? It will be removed from all issues.`)) {
+        return;
+      }
+      try {
+        await api.deleteLabel(label.id);
+        await Promise.all([reloadMeta(), loadBoard({ silent: true })]);
+      } catch (err) {
+        toast.push(err instanceof ApiError ? err.message : 'Delete label failed', 'error');
+      }
+    },
+  };
+
+  const onAddCustomColumn = async (type: CustomColumnType) => {
+    const base = COLUMN_TYPE_OPTIONS.find((o) => o.type === type)?.label ?? 'Column';
+    const name = nextLabelName(customColumns, base);
+    try {
+      const created = await api.createCustomColumn(project.id, {
+        name,
+        type,
+        ...(type === 'label' ? { settings: { options: [] } } : {}),
+      });
+      setCustomColumns((prev) => [...prev, created]);
+    } catch (err) {
+      toast.push(err instanceof ApiError ? err.message : 'Create column failed', 'error');
+    }
+  };
+
+  const onRenameCustomColumn = async (columnId: string, name: string) => {
+    const prev = customColumns;
+    setCustomColumns((cols) =>
+      cols.map((c) => (c.id === columnId ? { ...c, name } : c)),
+    );
+    try {
+      await api.updateCustomColumn(columnId, { name });
+    } catch (err) {
+      setCustomColumns(prev);
+      toast.push(err instanceof ApiError ? err.message : 'Rename failed', 'error');
+    }
+  };
+
+  const onDeleteCustomColumn = async (column: CustomColumn) => {
+    if (!confirm(`Delete column "${column.name}" and all its values?`)) return;
+    try {
+      await api.deleteCustomColumn(column.id);
+      setCustomColumns((prev) => prev.filter((c) => c.id !== column.id));
+    } catch (err) {
+      toast.push(err instanceof ApiError ? err.message : 'Delete column failed', 'error');
+    }
+  };
+
+  const onUpdateCustomSettings = async (
+    columnId: string,
+    settings: CustomColumn['settings'],
+  ) => {
+    const prev = customColumns;
+    setCustomColumns((cols) =>
+      cols.map((c) => (c.id === columnId ? { ...c, settings } : c)),
+    );
+    try {
+      await api.updateCustomColumn(columnId, { settings });
+    } catch (err) {
+      setCustomColumns(prev);
+      toast.push(err instanceof ApiError ? err.message : 'Column update failed', 'error');
+    }
+  };
+
+  const onSetCustomValue = async (
+    issueId: string,
+    columnId: string,
+    value: CustomValuePayload | null,
+  ) => {
+    const prev = columns;
+    setColumns((cols) =>
+      cols.map((c) => ({
+        ...c,
+        issues: c.issues.map((i) => {
+          if (i.id !== issueId) return i;
+          const existing = i.customValues ?? [];
+          const next =
+            value === null
+              ? existing.filter((v) => v.columnId !== columnId)
+              : existing.some((v) => v.columnId === columnId)
+                ? existing.map((v) =>
+                    v.columnId === columnId ? { ...v, value } : v,
+                  )
+                : [...existing, { issueId, columnId, value }];
+          return { ...i, customValues: next };
+        }),
+      })),
+    );
+    try {
+      await api.setCustomValue(issueId, columnId, value);
+    } catch (err) {
+      setColumns(prev);
+      toast.push(err instanceof ApiError ? err.message : 'Update failed', 'error');
+    }
+  };
+
+  const onHideField = (id: ListFieldId) => {
+    if (id === 'title') return;
+    void patchProject({ listFields: listFields.filter((f) => f !== id) });
+  };
+
+  const onCommitWidth = (id: string, w: number) => {
+    const next = { ...widths, [id]: w };
+    setWidths(next);
+    void patchProject({ listWidths: next });
+  };
+
+  const onToggleSelect = (issueId: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(issueId);
+      else next.delete(issueId);
+      return next;
+    });
+  };
+
+  const onToggleSelectMany = (issueIds: string[], selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of issueIds) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  /** Selected issue ids in board order (top to bottom across sections). */
+  const selectedInBoardOrder = () =>
+    columns.flatMap((c) =>
+      c.issues.filter((i) => selectedIds.has(i.id)).map((i) => i.id),
+    );
+
+  const onMoveIssuesToColumn = async (issueIds: string[], columnId: string) => {
+    if (!columns.some((c) => c.id === columnId)) return;
+    const toMove = issueIds.filter(
+      (id) => issueMap.get(id) && issueMap.get(id)?.columnId !== columnId,
+    );
+    if (toMove.length === 0) return;
+    const prev = columns;
+    const moveSet = new Set(toMove);
+    setColumns((cols) => {
+      const next = cols.map((c) => ({ ...c, issues: [...c.issues] }));
+      const moved: BoardIssue[] = [];
+      for (const c of next) {
+        c.issues = c.issues.filter((i) => {
+          if (moveSet.has(i.id)) {
+            moved.push({ ...i, columnId });
+            return false;
+          }
+          return true;
+        });
+      }
+      const target = next.find((c) => c.id === columnId);
+      if (!target) return cols;
+      target.issues.push(...moved);
+      return next;
+    });
+    try {
+      // Sequential moves preserve the relative order (each appends at the end
+      // of the target column). Warnings are deduplicated across issues.
+      const warnings = new Set<string>();
+      for (const id of toMove) {
+        const result = await api.moveIssue(id, { columnId });
+        for (const w of result.warnings) warnings.add(w.message);
+      }
+      for (const message of warnings) toast.push(message, 'warning');
+      setSelectedIds(new Set());
+      await loadBoard({ silent: true });
+    } catch (err) {
+      setColumns(prev);
+      toast.push(err instanceof ApiError ? err.message : 'Move failed', 'error');
+      await loadBoard({ silent: true });
+    }
+  };
+
+  const listExtras: ListTableExtras = {
+    customColumns,
+    users,
+    customHandlers: {
+      setValue: onSetCustomValue,
+      updateSettings: onUpdateCustomSettings,
+    },
+    widths,
+    onLiveWidth: (id, w) => setWidths((prev) => ({ ...prev, [id]: w })),
+    onCommitWidth,
+    onAddColumn: (type) => void onAddCustomColumn(type),
+    onRenameCustomColumn,
+    onDeleteCustomColumn,
+    onHideField,
+    selectedIds,
+    onToggleSelect,
+    onToggleSelectMany,
+  };
+
   const onDragStart = (event: DragStartEvent) => {
     const type = event.active.data.current?.type;
     if (type === 'column') {
       setDraggingColumn(true);
       setActiveIssue(null);
+      setDraggingRowIds(null);
+      return;
+    }
+    if (type === 'list-row') {
+      const issueId = String(event.active.data.current?.issueId ?? '');
+      const partOfSelection = selectedIds.has(issueId);
+      const ids = partOfSelection ? selectedInBoardOrder() : [issueId];
+      if (!partOfSelection) setSelectedIds(new Set([issueId]));
+      setDraggingRowIds(ids);
+      setDraggingColumn(false);
+      setActiveIssue(null);
       return;
     }
     setDraggingColumn(false);
+    setDraggingRowIds(null);
     const issue = issueMap.get(String(event.active.id));
     setActiveIssue(issue ?? null);
   };
 
   const onDragOver = (event: DragOverEvent) => {
     if (draggingColumn || event.active.data.current?.type === 'column') return;
+    // List rows don't re-shuffle live; the section highlight is the feedback.
+    if (event.active.data.current?.type === 'list-row') return;
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id);
@@ -1082,6 +1832,16 @@ export function BoardPage() {
   };
 
   const onDragEnd = async (event: DragEndEvent) => {
+    if (event.active.data.current?.type === 'list-row') {
+      const ids = draggingRowIds ?? [];
+      setDraggingRowIds(null);
+      if (!event.over) return;
+      const columnId = findColumnId(String(event.over.id));
+      if (!columnId || ids.length === 0) return;
+      await onMoveIssuesToColumn(ids, columnId);
+      return;
+    }
+
     const wasColumn = draggingColumn || event.active.data.current?.type === 'column';
     setActiveIssue(null);
     setDraggingColumn(false);
@@ -1395,8 +2155,16 @@ export function BoardPage() {
                 <ColumnDrop
                   key={col.id}
                   column={col}
+                  accent={columnAccent(col.id)}
                   layout={layout}
                   listFields={listFields}
+                  labels={labels}
+                  labelActions={labelActions}
+                  epics={epics}
+                  allColumns={resolvedColumns}
+                  extras={listExtras}
+                  onMoveColumn={onMoveToColumn}
+                  onSetEpic={onSetEpic}
                   collapsed={Boolean(collapsed[col.id])}
                   onToggleCollapse={() =>
                     setCollapsed((prev) => ({ ...prev, [col.id]: !prev[col.id] }))
@@ -1413,10 +2181,60 @@ export function BoardPage() {
             </div>
           </SortableContext>
           <DragOverlay>
-            {activeIssue ? <IssueCardOverlay issue={activeIssue} /> : null}
+            {activeIssue ? (
+              <IssueCardOverlay issue={activeIssue} />
+            ) : draggingRowIds && draggingRowIds.length > 0 ? (
+              <div className="row-drag-chip">
+                {draggingRowIds.length === 1 ? (
+                  <>
+                    <span className="issue-key">
+                      {issueMap.get(draggingRowIds[0])?.key}
+                    </span>{' '}
+                    {issueMap.get(draggingRowIds[0])?.title}
+                  </>
+                ) : (
+                  `${draggingRowIds.length} issues`
+                )}
+              </div>
+            ) : null}
           </DragOverlay>
         </DndContext>
       )}
+
+      {layout === 'list' && selectedIds.size > 0 ? (
+        <div className="selection-bar" role="toolbar" aria-label="Selection actions">
+          <span className="selection-bar-count">
+            {selectedIds.size} selected
+          </span>
+          <label className="selection-bar-move">
+            <span>Move to</span>
+            <select
+              value=""
+              aria-label="Move selected issues to column"
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id) void onMoveIssuesToColumn(selectedInBoardOrder(), id);
+              }}
+            >
+              <option value="" disabled>
+                Column…
+              </option>
+              {resolvedColumns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       {draftOpen ? (
         <IssueDrawer

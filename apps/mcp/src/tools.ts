@@ -5,6 +5,10 @@ import { paginateArray, runTool, ToolValidationError } from './response.js';
 import {
   BoardLayoutSchema,
   ColumnIdSchema,
+  CustomColumnIdSchema,
+  CustomColumnSettingsSchema,
+  CustomColumnTypeSchema,
+  CustomValueSchema,
   EpicIdSchema,
   HexColorSchema,
   IssueIdSchema,
@@ -14,6 +18,7 @@ import {
   LinkIdSchema,
   LinkTypeSchema,
   ListFieldSchema,
+  ListWidthsSchema,
   NullableIdFilterSchema,
   PaginationSchema,
   ProjectIdSchema,
@@ -97,7 +102,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Update project',
       description:
-        'Update project name, description, theme, boardLayout, and/or listFields (Monday-list columns).',
+        'Update project name, description, theme, boardLayout, listFields (visible built-in Monday-list columns), and/or listWidths (column pixel widths).',
       inputSchema: {
         projectId: ProjectIdSchema,
         name: z.string().min(1).max(120).optional(),
@@ -110,9 +115,10 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
           .array(ListFieldSchema)
           .optional()
           .describe('Visible list-table field ids'),
+        listWidths: ListWidthsSchema.optional(),
       },
     },
-    async ({ projectId, name, description, theme, boardLayout, listFields }) =>
+    async ({ projectId, name, description, theme, boardLayout, listFields, listWidths }) =>
       runTool(async () => {
         const body: Record<string, unknown> = {};
         if (name !== undefined) body.name = name;
@@ -120,6 +126,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
         if (theme !== undefined) body.theme = theme;
         if (boardLayout !== undefined) body.boardLayout = boardLayout;
         if (listFields !== undefined) body.listFields = listFields;
+        if (listWidths !== undefined) body.listWidths = listWidths;
         return api.patch(`/api/projects/${projectId}`, body);
       }),
   );
@@ -160,7 +167,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Create column',
       description:
-        'Create a board column. Optional isDone and color (#RRGGBB accent).',
+        'Create a board column. Optional isDone and color (#RRGGBB accent). Omitted/null color means the column follows the project theme\'s default accent for its position.',
       inputSchema: {
         projectId: ProjectIdSchema,
         name: z.string().min(1).max(80).describe('Column name'),
@@ -170,7 +177,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
           .describe('Mark as Done column (at most one per project)'),
         color: HexColorSchema.nullable()
           .optional()
-          .describe('Hex outline color'),
+          .describe('Hex accent color; omit/null = theme default'),
       },
     },
     async ({ projectId, name, isDone, color }) =>
@@ -187,7 +194,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Update column',
       description:
-        'Update column name, position, isDone, and/or color. Setting isDone=true clears it on other columns.',
+        'Update column name, position, isDone, and/or color. Setting isDone=true clears it on other columns. An explicit color stays fixed across themes; null reverts to the theme\'s default accent.',
       inputSchema: {
         columnId: ColumnIdSchema,
         name: z.string().min(1).max(80).optional(),
@@ -200,7 +207,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
         isDone: z.boolean().optional(),
         color: HexColorSchema.nullable()
           .optional()
-          .describe('Hex outline color; null clears'),
+          .describe('Hex accent color; null = follow theme default'),
       },
     },
     async ({ columnId, name, position, isDone, color }) =>
@@ -251,7 +258,7 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     {
       title: 'Get board',
       description:
-        'Get the Kanban board: columns with ordered top-level issues (and color/isDone metadata). Archived issues are excluded; use issue_list with archived:"true" to see them.',
+        'Get the Kanban board: columns with ordered top-level issues (and color/isDone metadata), plus customColumns (user-defined list-table columns) and each issue\'s customValues. Archived issues are excluded; use issue_list with archived:"true" to see them.',
       inputSchema: {
         projectId: ProjectIdSchema,
       },
@@ -874,6 +881,122 @@ export function registerTools(server: McpServer, api: KanbanApiClient): void {
     },
     async ({ issueId, labelId }) =>
       runTool(async () => api.delete(`/api/issues/${issueId}/labels/${labelId}`)),
+  );
+
+  // ── Custom list-table columns ─────────────────────────────────────────
+  server.registerTool(
+    'custom_column_list',
+    {
+      title: 'List custom columns',
+      description:
+        'List user-defined list-table columns for a project (ordered by position). Types: text, number, date, label, person, file, checkbox. Label columns carry settings.options [{ id, name, color }].',
+      inputSchema: {
+        projectId: ProjectIdSchema,
+        ...PaginationSchema,
+      },
+    },
+    async ({ projectId, limit, offset }) =>
+      runTool(async () => {
+        const items = await api.get<unknown[]>(
+          `/api/projects/${projectId}/list-columns`,
+        );
+        return paginateArray(items, limit, offset);
+      }),
+  );
+
+  server.registerTool(
+    'custom_column_create',
+    {
+      title: 'Create custom column',
+      description:
+        'Create a user-defined list-table column. For label type, pass settings.options with colored options (each { id, name, color }); other types need no settings.',
+      inputSchema: {
+        projectId: ProjectIdSchema,
+        name: z.string().min(1).max(60).describe('Column header name'),
+        type: CustomColumnTypeSchema,
+        settings: CustomColumnSettingsSchema.optional(),
+      },
+    },
+    async ({ projectId, name, type, settings }) =>
+      runTool(async () => {
+        const body: Record<string, unknown> = { name, type };
+        if (settings !== undefined) body.settings = settings;
+        return api.post(`/api/projects/${projectId}/list-columns`, body);
+      }),
+  );
+
+  server.registerTool(
+    'custom_column_update',
+    {
+      title: 'Update custom column',
+      description:
+        'Update a custom column name, position, and/or settings (e.g. replace the option set of a label column). The column type cannot change.',
+      inputSchema: {
+        columnId: CustomColumnIdSchema,
+        name: z.string().min(1).max(60).optional(),
+        position: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('0-based order among custom columns'),
+        settings: CustomColumnSettingsSchema.optional(),
+      },
+    },
+    async ({ columnId, name, position, settings }) =>
+      runTool(async () => {
+        const body: Record<string, unknown> = {};
+        if (name !== undefined) body.name = name;
+        if (position !== undefined) body.position = position;
+        if (settings !== undefined) body.settings = settings;
+        return api.patch(`/api/list-columns/${columnId}`, body);
+      }),
+  );
+
+  server.registerTool(
+    'custom_column_delete',
+    {
+      title: 'Delete custom column',
+      description:
+        'Delete a custom column and ALL its cell values across issues. Irreversible — confirm with the user before calling.',
+      inputSchema: { columnId: CustomColumnIdSchema },
+    },
+    async ({ columnId }) =>
+      runTool(async () => api.delete(`/api/list-columns/${columnId}`)),
+  );
+
+  server.registerTool(
+    'custom_value_set',
+    {
+      title: 'Set custom cell value',
+      description:
+        'Set (or clear with null) an issue\'s cell value for a custom column. The value shape must match the column type; label values must use an existing settings.options id.',
+      inputSchema: {
+        issueId: IssueIdSchema,
+        columnId: CustomColumnIdSchema,
+        value: CustomValueSchema,
+      },
+    },
+    async ({ issueId, columnId, value }) =>
+      runTool(async () =>
+        api.put(`/api/issues/${issueId}/values/${columnId}`, { value }),
+      ),
+  );
+
+  // ── Users ─────────────────────────────────────────────────────────────
+  server.registerTool(
+    'user_list',
+    {
+      title: 'List users',
+      description:
+        'List all users (id + email), e.g. for issue assignees or person-type custom columns.',
+      inputSchema: { ...PaginationSchema },
+    },
+    async ({ limit, offset }) =>
+      runTool(async () => {
+        const items = await api.get<unknown[]>('/api/users');
+        return paginateArray(items, limit, offset);
+      }),
   );
 
   // ── Comments ──────────────────────────────────────────────────────────

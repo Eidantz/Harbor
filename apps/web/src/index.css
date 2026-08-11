@@ -1677,30 +1677,399 @@ li.project-list-item:last-child {
 .monday-table-wrap {
   width: 100%;
   overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--bg-elevated) 55%, transparent);
 }
 
 .monday-table {
-  width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .monday-table th,
 .monday-table td {
-  padding: 0.5rem 0.75rem;
+  height: 2.4rem;
+  padding: 0.3rem 0.6rem;
   border-bottom: 1px solid var(--line);
+  border-inline-end: 1px solid color-mix(in oklab, var(--line) 62%, transparent);
   text-align: left;
   vertical-align: middle;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monday-table th:last-child,
+.monday-table td:last-child {
+  border-inline-end: 0;
+}
+
+.monday-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.monday-table :focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 75%, transparent);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
+
+.monday-table .monday-cell-input {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.monday-table .monday-cell-select.monday-priority-select {
+  min-width: 0;
+  max-width: none;
+}
+
+/* Row selection + drag */
+.monday-th.monday-th-select,
+.monday-table td.monday-cell-select {
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+}
+
+.select-cell-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.row-grip {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  padding: 0.25rem 0.1rem;
+  border-radius: var(--radius-xs);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+  transition: opacity 100ms ease;
+}
+
+.monday-table tbody tr:hover .row-grip,
+.monday-table tbody tr.is-selected .row-grip {
+  opacity: 1;
+}
+
+.row-grip:active {
+  cursor: grabbing;
+}
+
+.monday-table tbody tr.is-selected td {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+
+.monday-table tbody tr.is-row-dragging td {
+  opacity: 0.45;
+}
+
+.row-drag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 22rem;
+  padding: 0.45rem 0.8rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selection-bar {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.selection-bar-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.selection-bar-move {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.selection-bar-move select {
+  height: 2rem;
+  padding: 0 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* Resizable header chrome */
+.monday-th {
+  position: relative;
+}
+
+.monday-th-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.monday-th-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.th-menu-btn {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.monday-th:hover .th-menu-btn,
+.th-menu-btn[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.th-menu-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+
+.col-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  left: 50%;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: transparent;
+  transition: background 100ms ease;
+}
+
+.col-resize-handle:hover::after,
+.col-resize-handle:active::after {
+  background: var(--accent);
+}
+
+.monday-th-rename {
+  flex: 1;
+  min-width: 0;
+  height: 1.7rem;
+  padding: 0 0.4rem;
+  font-size: 0.78rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+}
+
+.monday-th.monday-th-add {
+  text-align: center;
+  overflow: visible;
+}
+
+.add-column-btn {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px dashed color-mix(in oklab, var(--muted) 45%, transparent);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.add-column-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.header-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.header-menu-item:hover {
+  background: var(--surface-2);
+}
+
+.header-menu-item.danger {
+  color: var(--danger);
+}
+
+.header-menu-icon {
+  width: 1.2rem;
+  text-align: center;
+}
+
+/* Custom cell widgets */
+.monday-checkbox {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.person-cell-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.person-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.person-option:hover {
+  background: var(--surface-2);
+}
+
+.person-option.selected {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.person-option-email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.file-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+}
+
+.file-cell-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.file-cell-link:hover {
+  text-decoration: underline;
+}
+
+.file-cell-clear {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.file-cell-clear:hover {
+  background: var(--surface-2);
+  color: var(--danger);
+}
+
+.file-cell-upload {
+  border: 1px dashed color-mix(in oklab, var(--muted) 45%, transparent);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+
+.file-cell-upload:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .monday-table th {
-  font-size: 0.72rem;
+  height: 2.2rem;
+  font-size: 0.7rem;
   font-weight: 650;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
-  background: color-mix(in oklab, var(--surface-2) 70%, transparent);
+  background: color-mix(in oklab, var(--surface-2) 88%, transparent);
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .monday-table tbody tr:hover td {
@@ -1760,7 +2129,6 @@ li.project-list-item:last-child {
   background-repeat: no-repeat;
 }
 
-.monday-cell-select:hover,
 .monday-date-input.overdue {
   color: var(--danger);
   font-weight: 600;
@@ -1778,6 +2146,279 @@ li.project-list-item:last-child {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
+}
+
+/* Monday-style label cell (list view) */
+.monday-table td.monday-cell-labels {
+  padding: 0.25rem 0.5rem;
+}
+
+.label-cell-trigger {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  height: 2.1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.label-cell-pill {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-cell-trigger:hover .label-cell-pill {
+  filter: brightness(1.08);
+}
+
+.label-cell-placeholder {
+  color: transparent;
+  background: color-mix(in oklab, var(--muted) 14%, var(--surface));
+  border: 1px dashed color-mix(in oklab, var(--muted) 35%, transparent);
+}
+
+.label-cell-trigger:hover .label-cell-placeholder {
+  color: var(--muted);
+}
+
+/* Owner (assignee) avatar cell */
+.owner-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.owner-avatar.empty {
+  background: transparent;
+  border: 1px dashed color-mix(in oklab, var(--muted) 45%, transparent);
+  color: color-mix(in oklab, var(--muted) 40%, transparent);
+  font-size: 0.6rem;
+}
+
+/* Markdown/document indicator cell */
+.doc-chip {
+  border: 0;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.2rem 0.3rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.doc-chip:hover {
+  background: var(--surface-2);
+}
+
+.monday-cell-input.monday-description-input {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Monday-style label dropdown */
+.label-menu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.label-menu-list {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.label-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.label-option:hover {
+  filter: brightness(1.08);
+}
+
+.label-option.selected {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--accent);
+}
+
+.label-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-menu-empty {
+  margin: 0;
+  padding: 0.4rem 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.label-menu-footer {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.label-menu-edit-btn,
+.label-menu-new {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.label-menu-edit-btn:hover,
+.label-menu-new:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.label-menu-apply {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.label-menu-apply:hover {
+  border-color: var(--accent);
+}
+
+/* Label edit mode rows */
+.label-edit-item {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.label-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.label-edit-swatch {
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--ink) 15%, transparent);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.label-edit-input {
+  flex: 1;
+  min-width: 0;
+  height: 1.9rem;
+  padding: 0 0.45rem;
+  font-size: 0.82rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+}
+
+.label-edit-input:focus {
+  border-color: var(--line-strong);
+  outline: none;
+}
+
+.label-edit-delete {
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.label-edit-delete:hover {
+  background: var(--surface-2);
+  color: var(--danger);
+}
+
+.label-palette {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.3rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+}
+
+.label-palette-swatch {
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.label-palette-swatch:hover {
+  transform: scale(1.12);
+}
+
+.label-palette-swatch.selected {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--accent);
 }
 
 .icon-btn.tiny-icon {
@@ -1826,7 +2467,7 @@ li.project-list-item:last-child {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.75rem;
+  padding: 0.6rem;
   min-height: 8rem;
   flex: 1;
 }
