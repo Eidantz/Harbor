@@ -1337,8 +1337,7 @@ li.project-list-item:last-child {
   min-height: calc(100vh - 12rem);
 }
 
-.board-column,
-.board-list-section {
+.board-column {
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -1350,14 +1349,54 @@ li.project-list-item:last-child {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
+/* Monday-style list groups: no card outline, accent lives in the title
+   and the table's left bar instead. */
 .board-list-section {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
 }
 
-.board-column.is-over,
-.board-list-section.is-over {
+.board-column.is-over {
   border-color: color-mix(in oklab, var(--col-accent, var(--accent)) 70%, var(--line));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--col-accent, var(--accent)) 28%, transparent);
+}
+
+.board-list-section.is-over .monday-table-wrap {
+  border-color: color-mix(in oklab, var(--col-accent, var(--accent)) 70%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--col-accent, var(--accent)) 30%, transparent);
+}
+
+.board-list-section .board-column-header {
+  background: transparent;
+  border-top: 0;
+  border-bottom: 0;
+  padding: 0.4rem 0.25rem;
+}
+
+.board-list-section .board-column-header h2 {
+  color: var(--col-accent, var(--accent));
+}
+
+.board-list-section .collapse-btn {
+  color: var(--col-accent, var(--accent));
+}
+
+.board-list-section .count-pill {
+  background: transparent;
+  color: color-mix(in oklab, var(--col-accent, var(--accent)) 65%, var(--muted));
+}
+
+.board-list-section .monday-table-wrap {
+  border-left: 4px solid var(--col-accent, var(--accent));
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.board-list-section.is-column-dragging {
+  background: var(--surface);
 }
 
 .board-column.is-column-dragging,
@@ -1768,6 +1807,71 @@ li.project-list-item:last-child {
 .monday-table tbody tr.is-selected td {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
 }
+
+/* Subtask (subitem) rows */
+.subtask-caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.3rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.subtask-caret:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.monday-table tbody tr.is-subtask-row td {
+  background: color-mix(in oklab, var(--surface) 45%, transparent);
+}
+
+.monday-table tbody tr.is-subtask-row:hover td {
+  background: color-mix(in oklab, var(--col-accent, var(--accent)) 7%, var(--surface));
+}
+
+.subtask-arrow {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding-left: 0.4rem;
+}
+
+.monday-title-cell.is-subtask-title .monday-title-btn {
+  font-weight: 500;
+}
+
+.subtask-add-form {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.subtask-add-form input {
+  flex: 0 1 18rem;
+  min-width: 0;
+  height: 1.9rem;
+  padding: 0 0.5rem;
+  font-size: 0.82rem;
+  background: transparent;
+  color: var(--ink);
+  border: 1px dashed color-mix(in oklab, var(--muted) 40%, transparent);
+  border-radius: var(--radius-xs);
+}
+
+.subtask-add-form input:focus {
+  border-style: solid;
+  border-color: var(--line-strong);
+  outline: none;
+}
+
 
 .monday-table tbody tr.is-row-dragging td {
   opacity: 0.45;
@@ -2474,6 +2578,7 @@ li.project-list-item:last-child {
 
 .board-list-body {
   min-height: 3rem;
+  padding: 0 0 0.9rem;
 }
 
 .board-list-section.is-collapsed .board-column-header {
@@ -2796,6 +2901,7 @@ button.meta-chip:hover {
 .drawer-panel {
   position: relative;
   width: min(520px, 100%);
+  max-width: 100%;
   height: 100%;
   background: var(--bg-elevated);
   border-left: 1px solid var(--line);
@@ -2823,6 +2929,83 @@ button.meta-chip:hover {
     transform: none;
     opacity: 1;
   }
+}
+
+.drawer-resize-handle {
+  position: absolute;
+  left: -5px;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  touch-action: none;
+}
+
+.drawer-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.drawer-resize-handle:hover::after,
+.drawer-resize-handle:active::after {
+  background: var(--accent);
+}
+
+.drawer-parent-link {
+  border: 0;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.drawer-parent-link:hover:not(:disabled) {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.subtask-link {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0.15rem 0.25rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.subtask-link:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.subtask-link:hover:not(:disabled) .subtask-link-title {
+  text-decoration: underline;
+}
+
+.subtask-link-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .drawer-header {

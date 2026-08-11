@@ -159,6 +159,24 @@ export class ProjectsService {
                 },
               },
               assignee: { select: { id: true, email: true } },
+              // Nested subitems for the Monday-style list view. Subtasks stay
+              // under their parent regardless of their own column.
+              subtasks: {
+                where: { archivedAt: null },
+                orderBy: { rank: 'asc' },
+                include: {
+                  labels: { include: { label: true } },
+                  customValues: true,
+                  _count: {
+                    select: {
+                      subtasks: true,
+                      linksTo: { where: { type: 'blocks' } },
+                      linksFrom: { where: { type: 'blocks' } },
+                    },
+                  },
+                  assignee: { select: { id: true, email: true } },
+                },
+              },
             },
           },
         },

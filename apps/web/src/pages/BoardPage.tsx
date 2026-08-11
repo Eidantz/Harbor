@@ -20,6 +20,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -146,6 +147,7 @@ type ListTableExtras = {
   selectedIds: ReadonlySet<string>;
   onToggleSelect: (issueId: string, selected: boolean) => void;
   onToggleSelectMany: (issueIds: string[], selected: boolean) => void;
+  onAddSubtask: (parentId: string, title: string) => Promise<void>;
 };
 
 /** Section header checkbox with indeterminate support. */
@@ -220,6 +222,22 @@ function DraggableIssueRow({
       {children(grip)}
     </tr>
   );
+}
+
+/** Apply fn to every board issue, including nested subtasks. */
+function mapBoardIssues(
+  cols: BoardColumnWithIssues[],
+  fn: (issue: BoardIssue) => BoardIssue,
+): BoardColumnWithIssues[] {
+  return cols.map((c) => ({
+    ...c,
+    issues: c.issues.map((i) => {
+      const mapped = fn(i);
+      return mapped.subtasks
+        ? { ...mapped, subtasks: mapped.subtasks.map(fn) }
+        : mapped;
+    }),
+  }));
 }
 
 function normalizeListFields(raw: ProjectContext['project']['listFields']): ListFieldId[] {
@@ -345,6 +363,289 @@ const TYPE_RANK: Record<IssueType, number> = {
   story: 2,
 };
 
+type IssueRowSharedProps = {
+  fields: ListFieldId[];
+  labels: Label[];
+  labelActions: LabelActions;
+  epics: Epic[];
+  allColumns: BoardColumn[];
+  extras: ListTableExtras;
+  columnIsDone: boolean;
+  onMoveColumn: (issueId: string, columnId: string) => Promise<void>;
+  onSetEpic: (issueId: string, epicId: string | null) => Promise<void>;
+  onOpen: (id: string, options?: OpenIssueOptions) => void;
+  onPatchIssue: (
+    issueId: string,
+    patch: {
+      priority?: IssuePriority;
+      humanEffort?: number | null;
+      locEffort?: number | null;
+      dueDate?: string | null;
+      description?: string | null;
+    },
+  ) => Promise<void>;
+};
+
+/** All data cells of a list row; shared between parent and subtask rows. */
+function IssueRowCells({
+  issue,
+  isSubtask = false,
+  caret,
+  fields,
+  labels,
+  labelActions,
+  epics,
+  allColumns,
+  extras,
+  columnIsDone,
+  onMoveColumn,
+  onSetEpic,
+  onOpen,
+  onPatchIssue,
+}: IssueRowSharedProps & {
+  issue: BoardIssue;
+  isSubtask?: boolean;
+  /** Expand/collapse control rendered before the title (parents only). */
+  caret?: ReactNode;
+}) {
+  const show = (id: ListFieldId) => fields.includes(id);
+  const blocked = issue._count?.linksTo ?? 0;
+
+  return (
+    <>
+      {show('key') ? (
+        <td>
+          <span className="issue-key">{issue.key}</span>
+        </td>
+      ) : null}
+      {show('title') ? (
+        <td>
+          <div className={`monday-title-cell${isSubtask ? ' is-subtask-title' : ''}`}>
+            {isSubtask ? (
+              <span className="subtask-arrow" aria-hidden>
+                ↳
+              </span>
+            ) : null}
+            {caret}
+            <button
+              type="button"
+              className="monday-title-btn"
+              onClick={() => onOpen(issue.id)}
+            >
+              {issue.title}
+            </button>
+            {issue.epic && !show('epic') ? <EpicBadge epic={issue.epic} /> : null}
+          </div>
+        </td>
+      ) : null}
+      {show('assignee') ? (
+        <td>
+          {issue.assignee ? (
+            <span className="owner-avatar" title={issue.assignee.email}>
+              {issue.assignee.email.slice(0, 1).toUpperCase()}
+            </span>
+          ) : (
+            <span className="owner-avatar empty" title="Unassigned" aria-hidden>
+              ●
+            </span>
+          )}
+        </td>
+      ) : null}
+      {show('epic') ? (
+        <td className="monday-cell-labels">
+          {isSubtask ? (
+            <span className="muted">—</span>
+          ) : (
+            <PickerCell
+              value={issue.epic?.id ?? null}
+              options={epics.map((e) => ({
+                id: e.id,
+                name: e.name,
+                color: e.color,
+              }))}
+              ariaLabel={`Epic for ${issue.key}`}
+              clearLabel="Remove from epic"
+              onSelect={(id) => void onSetEpic(issue.id, id)}
+            />
+          )}
+        </td>
+      ) : null}
+      {show('status') ? (
+        <td className="monday-cell-labels">
+          <PickerCell
+            value={issue.columnId}
+            options={allColumns.map((c) => ({
+              id: c.id,
+              name: c.name,
+              color: c.color,
+            }))}
+            ariaLabel={`Status for ${issue.key}`}
+            onSelect={(id) => {
+              if (id) void onMoveColumn(issue.id, id);
+            }}
+          />
+        </td>
+      ) : null}
+      {show('document') ? (
+        <td>
+          {issue.document ? (
+            <button
+              type="button"
+              className="doc-chip"
+              title="Open document"
+              aria-label={`Open document for ${issue.key}`}
+              onClick={() => onOpen(issue.id, { tab: 'details' })}
+            >
+              📄
+            </button>
+          ) : (
+            <span className="muted">—</span>
+          )}
+        </td>
+      ) : null}
+      {show('description') ? (
+        <td>
+          <input
+            className="monday-cell-input monday-description-input"
+            type="text"
+            placeholder="—"
+            maxLength={2000}
+            defaultValue={issue.description ?? ''}
+            key={`${issue.id}-d-${issue.description ?? 'x'}`}
+            aria-label={`Description for ${issue.key}`}
+            onBlur={(e) => {
+              const next = e.target.value.trim() || null;
+              if (next === (issue.description ?? null)) return;
+              void onPatchIssue(issue.id, { description: next });
+            }}
+          />
+        </td>
+      ) : null}
+      {show('priority') ? (
+        <td className="monday-cell-priority">
+          <select
+            className="monday-cell-select monday-priority-select"
+            value={issue.priority}
+            aria-label={`Priority for ${issue.key}`}
+            onChange={(e) =>
+              void onPatchIssue(issue.id, {
+                priority: e.target.value as IssuePriority,
+              })
+            }
+          >
+            {PRIORITY_ORDER.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </td>
+      ) : null}
+      {show('humanEffort') ? (
+        <td>
+          <input
+            className="monday-cell-input"
+            type="number"
+            min={0}
+            step={0.5}
+            placeholder="—"
+            defaultValue={issue.humanEffort ?? ''}
+            key={`${issue.id}-h-${issue.humanEffort ?? 'x'}`}
+            aria-label={`Human effort for ${issue.key}`}
+            onBlur={(e) => {
+              const raw = e.target.value.trim();
+              const next = raw === '' ? null : Number(raw);
+              if (raw !== '' && Number.isNaN(next)) return;
+              if (next === issue.humanEffort) return;
+              void onPatchIssue(issue.id, { humanEffort: next });
+            }}
+          />
+        </td>
+      ) : null}
+      {show('locEffort') ? (
+        <td>
+          <input
+            className="monday-cell-input"
+            type="number"
+            min={0}
+            step={1}
+            placeholder="—"
+            defaultValue={issue.locEffort ?? ''}
+            key={`${issue.id}-loc-${issue.locEffort ?? 'x'}`}
+            aria-label={`LOC effort for ${issue.key}`}
+            onBlur={(e) => {
+              const raw = e.target.value.trim();
+              const next = raw === '' ? null : Math.round(Number(raw));
+              if (raw !== '' && Number.isNaN(next)) return;
+              if (next === issue.locEffort) return;
+              void onPatchIssue(issue.id, { locEffort: next });
+            }}
+          />
+        </td>
+      ) : null}
+      {show('dueDate') ? (
+        <td>
+          <input
+            className={`monday-cell-input monday-date-input${
+              !columnIsDone && isOverdue(issue.dueDate) ? ' overdue' : ''
+            }`}
+            type="date"
+            value={toDateInputValue(issue.dueDate)}
+            aria-label={`Due date for ${issue.key}`}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next === toDateInputValue(issue.dueDate)) return;
+              void onPatchIssue(issue.id, { dueDate: next || null });
+            }}
+          />
+        </td>
+      ) : null}
+      {show('type') ? (
+        <td>
+          <TypeBadge type={issue.type} />
+        </td>
+      ) : null}
+      {show('labels') ? (
+        <td className="monday-cell-labels">
+          <LabelCell issue={issue} labels={labels} actions={labelActions} />
+        </td>
+      ) : null}
+      {show('blockers') ? (
+        <td>
+          {blocked > 0 ? (
+            <button
+              type="button"
+              className="meta-chip warn"
+              onClick={() => onOpen(issue.id, { tab: 'links' })}
+            >
+              ⊘ {blocked}
+            </button>
+          ) : (
+            <span className="muted">—</span>
+          )}
+        </td>
+      ) : null}
+      {extras.customColumns.map((c) => (
+        <td
+          key={c.id}
+          className={
+            c.type === 'label' || c.type === 'person'
+              ? 'monday-cell-labels'
+              : undefined
+          }
+        >
+          <CustomCell
+            issue={issue}
+            column={c}
+            users={extras.users}
+            handlers={extras.customHandlers}
+          />
+        </td>
+      ))}
+    </>
+  );
+}
+
 function ListIssueTable({
   column,
   fields,
@@ -384,6 +685,30 @@ function ListIssueTable({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [subtaskDrafts, setSubtaskDrafts] = useState<Record<string, string>>({});
+
+  const toggleExpanded = (issueId: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(issueId)) next.delete(issueId);
+      else next.add(issueId);
+      return next;
+    });
+
+  const rowShared: IssueRowSharedProps = {
+    fields,
+    labels,
+    labelActions,
+    epics,
+    allColumns,
+    extras,
+    columnIsDone: column.isDone,
+    onMoveColumn,
+    onSetEpic,
+    onOpen,
+    onPatchIssue,
+  };
 
   const toggleSort = (key: ListSortKey) => {
     if (sortKey === key) {
@@ -582,10 +907,14 @@ function ListIssueTable({
             </tr>
           ) : (
             sortedIssues.map((issue) => {
-              const blocked = issue._count?.linksTo ?? 0;
               const selected = extras.selectedIds.has(issue.id);
+              const subtasks = issue.subtasks ?? [];
+              const subtaskCount = subtasks.length || (issue._count?.subtasks ?? 0);
+              const isExpanded = expanded.has(issue.id);
+              const draft = subtaskDrafts[issue.id] ?? '';
               return (
-                <DraggableIssueRow key={issue.id} issue={issue} selected={selected}>
+                <Fragment key={issue.id}>
+                <DraggableIssueRow issue={issue} selected={selected}>
                   {(grip) => (
                     <>
                   <td className="monday-cell-select">
@@ -600,229 +929,77 @@ function ListIssueTable({
                       />
                     </span>
                   </td>
-                  {show('key') ? (
-                    <td>
-                      <span className="issue-key">{issue.key}</span>
-                    </td>
-                  ) : null}
-                  {show('title') ? (
-                    <td>
-                      <div className="monday-title-cell">
+                  <IssueRowCells
+                    issue={issue}
+                    caret={
+                      subtaskCount > 0 ? (
                         <button
                           type="button"
-                          className="monday-title-btn"
-                          onClick={() => onOpen(issue.id)}
+                          className="subtask-caret"
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} subtasks of ${issue.key}`}
+                          onClick={() => toggleExpanded(issue.id)}
                         >
-                          {issue.title}
+                          {isExpanded ? '▾' : '▸'} {subtaskCount}
                         </button>
-                        {issue.epic && !show('epic') ? <EpicBadge epic={issue.epic} /> : null}
-                      </div>
-                    </td>
-                  ) : null}
-                  {show('assignee') ? (
-                    <td>
-                      {issue.assignee ? (
-                        <span className="owner-avatar" title={issue.assignee.email}>
-                          {issue.assignee.email.slice(0, 1).toUpperCase()}
-                        </span>
-                      ) : (
-                        <span className="owner-avatar empty" title="Unassigned" aria-hidden>
-                          ●
-                        </span>
-                      )}
-                    </td>
-                  ) : null}
-                  {show('epic') ? (
-                    <td className="monday-cell-labels">
-                      <PickerCell
-                        value={issue.epic?.id ?? null}
-                        options={epics.map((e) => ({
-                          id: e.id,
-                          name: e.name,
-                          color: e.color,
-                        }))}
-                        ariaLabel={`Epic for ${issue.key}`}
-                        clearLabel="Remove from epic"
-                        onSelect={(id) => void onSetEpic(issue.id, id)}
-                      />
-                    </td>
-                  ) : null}
-                  {show('status') ? (
-                    <td className="monday-cell-labels">
-                      <PickerCell
-                        value={issue.columnId}
-                        options={allColumns.map((c) => ({
-                          id: c.id,
-                          name: c.name,
-                          color: c.color,
-                        }))}
-                        ariaLabel={`Status for ${issue.key}`}
-                        onSelect={(id) => {
-                          if (id) void onMoveColumn(issue.id, id);
-                        }}
-                      />
-                    </td>
-                  ) : null}
-                  {show('document') ? (
-                    <td>
-                      {issue.document ? (
-                        <button
-                          type="button"
-                          className="doc-chip"
-                          title="Open document"
-                          aria-label={`Open document for ${issue.key}`}
-                          onClick={() => onOpen(issue.id, { tab: 'details' })}
-                        >
-                          📄
-                        </button>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                  ) : null}
-                  {show('description') ? (
-                    <td>
-                      <input
-                        className="monday-cell-input monday-description-input"
-                        type="text"
-                        placeholder="—"
-                        maxLength={2000}
-                        defaultValue={issue.description ?? ''}
-                        key={`${issue.id}-d-${issue.description ?? 'x'}`}
-                        aria-label={`Description for ${issue.key}`}
-                        onBlur={(e) => {
-                          const next = e.target.value.trim() || null;
-                          if (next === (issue.description ?? null)) return;
-                          void onPatchIssue(issue.id, { description: next });
-                        }}
-                      />
-                    </td>
-                  ) : null}
-                  {show('priority') ? (
-                    <td className="monday-cell-priority">
-                      <select
-                        className="monday-cell-select monday-priority-select"
-                        value={issue.priority}
-                        aria-label={`Priority for ${issue.key}`}
-                        onChange={(e) =>
-                          void onPatchIssue(issue.id, {
-                            priority: e.target.value as IssuePriority,
-                          })
-                        }
-                      >
-                        {PRIORITY_ORDER.map((p) => (
-                          <option key={p} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  ) : null}
-                  {show('humanEffort') ? (
-                    <td>
-                      <input
-                        className="monday-cell-input"
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        placeholder="—"
-                        defaultValue={issue.humanEffort ?? ''}
-                        key={`${issue.id}-h-${issue.humanEffort ?? 'x'}`}
-                        aria-label={`Human effort for ${issue.key}`}
-                        onBlur={(e) => {
-                          const raw = e.target.value.trim();
-                          const next = raw === '' ? null : Number(raw);
-                          if (raw !== '' && Number.isNaN(next)) return;
-                          if (next === issue.humanEffort) return;
-                          void onPatchIssue(issue.id, { humanEffort: next });
-                        }}
-                      />
-                    </td>
-                  ) : null}
-                  {show('locEffort') ? (
-                    <td>
-                      <input
-                        className="monday-cell-input"
-                        type="number"
-                        min={0}
-                        step={1}
-                        placeholder="—"
-                        defaultValue={issue.locEffort ?? ''}
-                        key={`${issue.id}-loc-${issue.locEffort ?? 'x'}`}
-                        aria-label={`LOC effort for ${issue.key}`}
-                        onBlur={(e) => {
-                          const raw = e.target.value.trim();
-                          const next = raw === '' ? null : Math.round(Number(raw));
-                          if (raw !== '' && Number.isNaN(next)) return;
-                          if (next === issue.locEffort) return;
-                          void onPatchIssue(issue.id, { locEffort: next });
-                        }}
-                      />
-                    </td>
-                  ) : null}
-                  {show('dueDate') ? (
-                    <td>
-                      <input
-                        className={`monday-cell-input monday-date-input${
-                          !column.isDone && isOverdue(issue.dueDate) ? ' overdue' : ''
-                        }`}
-                        type="date"
-                        value={toDateInputValue(issue.dueDate)}
-                        aria-label={`Due date for ${issue.key}`}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          if (next === toDateInputValue(issue.dueDate)) return;
-                          void onPatchIssue(issue.id, { dueDate: next || null });
-                        }}
-                      />
-                    </td>
-                  ) : null}
-                  {show('type') ? (
-                    <td>
-                      <TypeBadge type={issue.type} />
-                    </td>
-                  ) : null}
-                  {show('labels') ? (
-                    <td className="monday-cell-labels">
-                      <LabelCell issue={issue} labels={labels} actions={labelActions} />
-                    </td>
-                  ) : null}
-                  {show('blockers') ? (
-                    <td>
-                      {blocked > 0 ? (
-                        <button
-                          type="button"
-                          className="meta-chip warn"
-                          onClick={() => onOpen(issue.id, { tab: 'links' })}
-                        >
-                          ⊘ {blocked}
-                        </button>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                  ) : null}
-                  {extras.customColumns.map((c) => (
-                    <td
-                      key={c.id}
-                      className={
-                        c.type === 'label' || c.type === 'person'
-                          ? 'monday-cell-labels'
-                          : undefined
-                      }
-                    >
-                      <CustomCell
-                        issue={issue}
-                        column={c}
-                        users={extras.users}
-                        handlers={extras.customHandlers}
-                      />
-                    </td>
-                  ))}
+                      ) : null
+                    }
+                    {...rowShared}
+                  />
                   <td className="monday-td-add" aria-hidden />
                     </>
                   )}
                 </DraggableIssueRow>
+                {isExpanded
+                  ? subtasks.map((sub) => (
+                      <tr key={sub.id} className="is-subtask-row">
+                        <td className="monday-cell-select" aria-hidden />
+                        <IssueRowCells issue={sub} isSubtask {...rowShared} />
+                        <td className="monday-td-add" aria-hidden />
+                      </tr>
+                    ))
+                  : null}
+                {isExpanded ? (
+                  <tr className="is-subtask-row subtask-add-row">
+                    <td aria-hidden />
+                    <td colSpan={columnCount - 1}>
+                      <form
+                        className="subtask-add-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const title = draft.trim();
+                          if (!title) return;
+                          setSubtaskDrafts((prev) => ({ ...prev, [issue.id]: '' }));
+                          void extras.onAddSubtask(issue.id, title);
+                        }}
+                      >
+                        <span className="subtask-arrow" aria-hidden>
+                          ↳
+                        </span>
+                        <input
+                          value={draft}
+                          maxLength={300}
+                          placeholder="Add subtask…"
+                          aria-label={`Add subtask to ${issue.key}`}
+                          onChange={(e) =>
+                            setSubtaskDrafts((prev) => ({
+                              ...prev,
+                              [issue.id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          type="submit"
+                          className="btn btn-secondary btn-tiny"
+                          disabled={!draft.trim()}
+                        >
+                          Add
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
               );
             })
           )}
@@ -1276,7 +1453,8 @@ export function BoardPage() {
   }, [showArchived, loadArchived]);
 
   const refreshAfterIssueChange = () => {
-    void loadBoard();
+    // Silent: keep the table mounted so expand state / open menus survive.
+    void loadBoard({ silent: true });
     void reloadMeta();
     if (showArchived) void loadArchived();
   };
@@ -1478,10 +1656,7 @@ export function BoardPage() {
   ) => {
     const prev = columns;
     setColumns((cols) =>
-      cols.map((c) => ({
-        ...c,
-        issues: c.issues.map((i) => (i.id === issueId ? { ...i, ...patch } : i)),
-      })),
+      mapBoardIssues(cols, (i) => (i.id === issueId ? { ...i, ...patch } : i)),
     );
     try {
       await api.updateIssue(issueId, patch);
@@ -1493,17 +1668,25 @@ export function BoardPage() {
 
   const onMoveToColumn = async (issueId: string, columnId: string) => {
     const prev = columns;
-    setColumns((cols) => {
-      const next = cols.map((c) => ({ ...c, issues: [...c.issues] }));
-      const source = next.find((c) => c.issues.some((i) => i.id === issueId));
-      const dest = next.find((c) => c.id === columnId);
-      if (!source || !dest || source.id === dest.id) return cols;
-      const idx = source.issues.findIndex((i) => i.id === issueId);
-      const [moved] = source.issues.splice(idx, 1);
-      moved.columnId = columnId;
-      dest.issues.push(moved);
-      return next;
-    });
+    const isTopLevel = issueMap.has(issueId);
+    if (isTopLevel) {
+      setColumns((cols) => {
+        const next = cols.map((c) => ({ ...c, issues: [...c.issues] }));
+        const source = next.find((c) => c.issues.some((i) => i.id === issueId));
+        const dest = next.find((c) => c.id === columnId);
+        if (!source || !dest || source.id === dest.id) return cols;
+        const idx = source.issues.findIndex((i) => i.id === issueId);
+        const [moved] = source.issues.splice(idx, 1);
+        moved.columnId = columnId;
+        dest.issues.push(moved);
+        return next;
+      });
+    } else {
+      // Subtask: it stays nested under its parent, only its status changes.
+      setColumns((cols) =>
+        mapBoardIssues(cols, (i) => (i.id === issueId ? { ...i, columnId } : i)),
+      );
+    }
     try {
       const result = await api.moveIssue(issueId, { columnId });
       for (const w of result.warnings) toast.push(w.message, 'warning');
@@ -1543,16 +1726,13 @@ export function BoardPage() {
     toggle: async (issueId, label, attach) => {
       const prev = columns;
       setColumns((cols) =>
-        cols.map((c) => ({
-          ...c,
-          issues: c.issues.map((i) => {
-            if (i.id !== issueId) return i;
-            const nextLabels = attach
-              ? [...i.labels, { issueId, labelId: label.id, label }]
-              : i.labels.filter((l) => l.labelId !== label.id);
-            return { ...i, labels: nextLabels };
-          }),
-        })),
+        mapBoardIssues(cols, (i) => {
+          if (i.id !== issueId) return i;
+          const nextLabels = attach
+            ? [...i.labels, { issueId, labelId: label.id, label }]
+            : i.labels.filter((l) => l.labelId !== label.id);
+          return { ...i, labels: nextLabels };
+        }),
       );
       try {
         if (attach) await api.attachLabel(issueId, label.id);
@@ -1654,22 +1834,19 @@ export function BoardPage() {
   ) => {
     const prev = columns;
     setColumns((cols) =>
-      cols.map((c) => ({
-        ...c,
-        issues: c.issues.map((i) => {
-          if (i.id !== issueId) return i;
-          const existing = i.customValues ?? [];
-          const next =
-            value === null
-              ? existing.filter((v) => v.columnId !== columnId)
-              : existing.some((v) => v.columnId === columnId)
-                ? existing.map((v) =>
-                    v.columnId === columnId ? { ...v, value } : v,
-                  )
-                : [...existing, { issueId, columnId, value }];
-          return { ...i, customValues: next };
-        }),
-      })),
+      mapBoardIssues(cols, (i) => {
+        if (i.id !== issueId) return i;
+        const existing = i.customValues ?? [];
+        const next =
+          value === null
+            ? existing.filter((v) => v.columnId !== columnId)
+            : existing.some((v) => v.columnId === columnId)
+              ? existing.map((v) =>
+                  v.columnId === columnId ? { ...v, value } : v,
+                )
+              : [...existing, { issueId, columnId, value }];
+        return { ...i, customValues: next };
+      }),
     );
     try {
       await api.setCustomValue(issueId, columnId, value);
@@ -1776,6 +1953,14 @@ export function BoardPage() {
     selectedIds,
     onToggleSelect,
     onToggleSelectMany,
+    onAddSubtask: async (parentId, title) => {
+      try {
+        await api.createSubtask(parentId, { title });
+        await loadBoard({ silent: true });
+      } catch (err) {
+        toast.push(err instanceof ApiError ? err.message : 'Create subtask failed', 'error');
+      }
+    },
   };
 
   const onDragStart = (event: DragStartEvent) => {
@@ -2257,9 +2442,11 @@ export function BoardPage() {
           projectId={project.id}
           labels={labels}
           epics={epics}
+          columns={columns}
           initialTab={drawerTab}
           onClose={closeIssue}
           onChanged={refreshAfterIssueChange}
+          onOpenIssue={openIssue}
         />
       ) : null}
     </main>

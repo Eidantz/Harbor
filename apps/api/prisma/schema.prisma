@@ -90,7 +90,7 @@ model Project {
   theme        String      @default("tokyo-night")
   boardLayout  BoardLayout @default(columns)
   /// Visible Monday-list table field ids (JSON string array)
-  listFields   Json        @default("[\"key\",\"title\",\"priority\",\"humanEffort\",\"locEffort\",\"type\",\"labels\",\"blockers\"]")
+  listFields   Json        @default("[\"key\",\"title\",\"assignee\",\"epic\",\"status\",\"document\",\"description\",\"priority\",\"humanEffort\",\"locEffort\",\"dueDate\",\"type\",\"labels\",\"blockers\"]")
   /// Per-column pixel widths for the list table (JSON map of field/column id -> px)
   listWidths   Json        @default("{}")
   issueCounter Int         @default(0)

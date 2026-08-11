@@ -208,6 +208,8 @@ export interface BoardIssue {
   epic: EpicSummary | null;
   assignee: User | null;
   customValues?: IssueCustomValue[];
+  /** Nested subitems (list view); subtask payloads omit `epic` and `subtasks`. */
+  subtasks?: BoardIssue[];
   _count: { subtasks: number; linksTo: number; linksFrom: number };
 }
 

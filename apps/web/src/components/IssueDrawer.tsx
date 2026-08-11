@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { api } from '../api/client';
 import type {
   ActivityEvent,
@@ -28,6 +35,22 @@ import { PriorityBadge } from './PriorityBadge';
 import { TypeBadge } from './TypeBadge';
 
 export type DrawerTab = 'details' | 'links' | 'files' | 'comments' | 'activity';
+
+const DRAWER_WIDTH_KEY = 'kanban.drawerWidth';
+const DRAWER_DEFAULT_WIDTH = 520;
+const DRAWER_MIN_WIDTH = 380;
+
+function clampDrawerWidth(w: number): number {
+  return Math.round(
+    Math.min(window.innerWidth * 0.9, Math.max(DRAWER_MIN_WIDTH, w)),
+  );
+}
+
+function loadDrawerWidth(): number {
+  const raw = Number(localStorage.getItem(DRAWER_WIDTH_KEY));
+  if (!Number.isFinite(raw) || raw < DRAWER_MIN_WIDTH) return DRAWER_DEFAULT_WIDTH;
+  return clampDrawerWidth(raw);
+}
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -127,6 +150,8 @@ type IssueDrawerBase = {
   epics: Epic[];
   onClose: () => void;
   onChanged: () => void;
+  /** Navigate the drawer to another issue (subtask / parent breadcrumb). */
+  onOpenIssue?: (issueId: string) => void;
 };
 
 type EditDrawerProps = IssueDrawerBase & {
@@ -150,12 +175,46 @@ type CreateDrawerProps = IssueDrawerBase & {
 export type IssueDrawerProps = EditDrawerProps | CreateDrawerProps;
 
 export function IssueDrawer(props: IssueDrawerProps) {
-  const { projectId, labels, epics, onClose, onChanged } = props;
+  const { projectId, labels, epics, onClose, onChanged, onOpenIssue } = props;
   const isCreate = props.mode === 'create';
   const issueId = isCreate ? undefined : props.issueId;
   const initialTab = isCreate ? 'details' : (props.initialTab ?? 'details');
   const columns = props.columns ?? [];
   const toast = useToast();
+
+  const [drawerWidth, setDrawerWidth] = useState(loadDrawerWidth);
+  const resizeDrag = useRef<{ pointerId: number } | null>(null);
+
+  const onResizePointerDown = (e: ReactPointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizeDrag.current = { pointerId: e.pointerId };
+  };
+
+  const onResizePointerMove = (e: ReactPointerEvent<HTMLElement>) => {
+    if (!resizeDrag.current) return;
+    // Panel is anchored to the right edge, so width = viewport - cursor x.
+    setDrawerWidth(clampDrawerWidth(window.innerWidth - e.clientX));
+  };
+
+  const onResizePointerUp = (e: ReactPointerEvent<HTMLElement>) => {
+    if (!resizeDrag.current) return;
+    resizeDrag.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    setDrawerWidth((w) => {
+      localStorage.setItem(DRAWER_WIDTH_KEY, String(w));
+      return w;
+    });
+  };
+
+  const onResizeReset = () => {
+    setDrawerWidth(DRAWER_DEFAULT_WIDTH);
+    localStorage.setItem(DRAWER_WIDTH_KEY, String(DRAWER_DEFAULT_WIDTH));
+  };
 
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -305,6 +364,21 @@ export function IssueDrawer(props: IssueDrawerProps) {
       onChanged();
     } catch (err) {
       toast.push(err instanceof ApiError ? err.message : 'Comment failed', 'error');
+    }
+  };
+
+  const onMoveToColumn = async (columnId: string) => {
+    if (!issue || columnId === issue.column.id) return;
+    setSaving(true);
+    try {
+      const result = await api.moveIssue(issue.id, { columnId });
+      for (const w of result.warnings) toast.push(w.message, 'warning');
+      setIssue(result.issue);
+      onChanged();
+    } catch (err) {
+      toast.push(err instanceof ApiError ? err.message : 'Move failed', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -504,7 +578,20 @@ export function IssueDrawer(props: IssueDrawerProps) {
         role="dialog"
         aria-modal="true"
         aria-label={isCreate ? 'Create issue' : 'Issue details'}
+        style={{ width: drawerWidth }}
       >
+        <span
+          className="drawer-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel (double-click to reset)"
+          title="Drag to resize • double-click to reset"
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          onPointerCancel={onResizePointerUp}
+          onDoubleClick={onResizeReset}
+        />
         <header className="drawer-header">
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close drawer">
             ✕
@@ -517,6 +604,17 @@ export function IssueDrawer(props: IssueDrawerProps) {
             </div>
           ) : issue ? (
             <div className="drawer-header-meta">
+              {issue.parent ? (
+                <button
+                  type="button"
+                  className="drawer-parent-link"
+                  title={`Open parent: ${issue.parent.title}`}
+                  onClick={() => onOpenIssue?.(issue.parent!.id)}
+                  disabled={!onOpenIssue}
+                >
+                  ↑ {issue.parent.key}
+                </button>
+              ) : null}
               <span className="issue-key">{issue.key}</span>
               <TypeBadge type={issue.type} />
               <PriorityBadge priority={issue.priority} />
@@ -669,6 +767,18 @@ export function IssueDrawer(props: IssueDrawerProps) {
                   <select
                     value={draftColumnId}
                     onChange={(e) => setDraftColumnId(e.target.value)}
+                  >
+                    {columns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : columns.length > 0 ? (
+                  <select
+                    value={issue!.column.id}
+                    disabled={saving}
+                    onChange={(e) => void onMoveToColumn(e.target.value)}
                   >
                     {columns.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -832,8 +942,19 @@ export function IssueDrawer(props: IssueDrawerProps) {
                       <ul className="simple-list">
                         {issue.subtasks.map((s) => (
                           <li key={s.id}>
-                            <span className="issue-key">{s.key}</span>
-                            <span>{s.title}</span>
+                            <button
+                              type="button"
+                              className="subtask-link"
+                              title={`Open ${s.key}`}
+                              onClick={() => onOpenIssue?.(s.id)}
+                              disabled={!onOpenIssue}
+                            >
+                              <span className="issue-key">{s.key}</span>
+                              <span className="subtask-link-title">{s.title}</span>
+                              {s.column ? (
+                                <span className="muted">{s.column.name}</span>
+                              ) : null}
+                            </button>
                           </li>
                         ))}
                       </ul>
