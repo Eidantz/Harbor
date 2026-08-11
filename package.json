@@ -24,6 +24,7 @@
     "db:studio": "bun run --filter @kanban/api prisma:studio",
     "lint": "bun run --workspaces --if-present lint",
     "docker:up": "docker compose up --build -d",
+    "docker:rebuild": "docker compose build --no-cache && docker compose up -d --force-recreate",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "setup:env": "cp -n .env.example .env 2>/dev/null || true; ln -sfn ../../.env apps/api/.env",
