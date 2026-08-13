@@ -148,7 +148,71 @@ type ListTableExtras = {
   onToggleSelect: (issueId: string, selected: boolean) => void;
   onToggleSelectMany: (issueIds: string[], selected: boolean) => void;
   onAddSubtask: (parentId: string, title: string) => Promise<void>;
+  onAddIssue: (columnId: string, title: string) => Promise<void>;
 };
+
+type SummarySegment = { key: string; color: string; count: number; label: string };
+
+function SummaryBar({ segments }: { segments: SummarySegment[] }) {
+  const total = segments.reduce((sum, s) => sum + s.count, 0);
+  if (total === 0) return <div className="summary-bar" aria-hidden />;
+  return (
+    <div
+      className="summary-bar"
+      title={segments.map((s) => `${s.label}: ${s.count}`).join(' · ')}
+    >
+      {segments
+        .filter((s) => s.count > 0)
+        .map((s) => (
+          <span
+            key={s.key}
+            style={{
+              flexGrow: s.count,
+              flexShrink: 0,
+              flexBasis: 0,
+              background: s.color,
+            }}
+            title={`${s.label}: ${s.count}`}
+          />
+        ))}
+    </div>
+  );
+}
+
+function countBy(
+  issues: BoardIssue[],
+  keyOf: (issue: BoardIssue) => string | null,
+  metaOf: (issue: BoardIssue) => { color: string; label: string },
+): SummarySegment[] {
+  const map = new Map<string, SummarySegment>();
+  for (const issue of issues) {
+    const key = keyOf(issue);
+    if (!key) continue;
+    const cur = map.get(key);
+    if (cur) cur.count += 1;
+    else map.set(key, { key, count: 1, ...metaOf(issue) });
+  }
+  return [...map.values()];
+}
+
+function labelSegments(issues: BoardIssue[]): SummarySegment[] {
+  const map = new Map<string, SummarySegment>();
+  for (const issue of issues) {
+    for (const entry of issue.labels) {
+      const cur = map.get(entry.labelId);
+      if (cur) cur.count += 1;
+      else {
+        map.set(entry.labelId, {
+          key: entry.labelId,
+          color: entry.label.color,
+          label: entry.label.name,
+          count: 1,
+        });
+      }
+    }
+  }
+  return [...map.values()];
+}
 
 /** Section header checkbox with indeterminate support. */
 function SectionSelectAll({
@@ -628,11 +692,7 @@ function IssueRowCells({
       {extras.customColumns.map((c) => (
         <td
           key={c.id}
-          className={
-            c.type === 'label' || c.type === 'person'
-              ? 'monday-cell-labels'
-              : undefined
-          }
+          className={c.type === 'label' ? 'monday-cell-labels' : undefined}
         >
           <CustomCell
             issue={issue}
@@ -687,6 +747,7 @@ function ListIssueTable({
   const [renameDraft, setRenameDraft] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [subtaskDrafts, setSubtaskDrafts] = useState<Record<string, string>>({});
+  const [addDraft, setAddDraft] = useState('');
 
   const toggleExpanded = (issueId: string) =>
     setExpanded((prev) => {
@@ -773,6 +834,88 @@ function ListIssueTable({
     ADD_COLUMN_WIDTH;
   const columnCount = visibleFields.length + extras.customColumns.length + 2;
   const sectionIssueIds = sortedIssues.map((i) => i.id);
+  const sectionItems = useMemo(
+    () => sortedIssues.flatMap((i) => [i, ...(i.subtasks ?? [])]),
+    [sortedIssues],
+  );
+
+  const summaryForField = (id: ListFieldId) => {
+    switch (id) {
+      case 'status':
+        return (
+          <SummaryBar
+            segments={countBy(
+              sectionItems,
+              (i) => i.columnId,
+              (i) => {
+                const col = allColumns.find((c) => c.id === i.columnId);
+                return {
+                  color: col?.color ?? '#808080',
+                  label: col?.name ?? 'Status',
+                };
+              },
+            )}
+          />
+        );
+      case 'epic':
+        return (
+          <SummaryBar
+            segments={countBy(
+              sortedIssues,
+              (i) => i.epic?.id ?? null,
+              (i) => ({
+                color: i.epic?.color ?? '#808080',
+                label: i.epic?.name ?? 'Epic',
+              }),
+            )}
+          />
+        );
+      case 'labels':
+        return <SummaryBar segments={labelSegments(sectionItems)} />;
+      case 'document': {
+        const n = sectionItems.filter((i) => i.document).length;
+        return n > 0 ? <span className="summary-count">{n}</span> : null;
+      }
+      case 'assignee': {
+        const n = sectionItems.filter((i) => i.assigneeId).length;
+        return n > 0 ? <span className="summary-count">{n}</span> : null;
+      }
+      default:
+        return null;
+    }
+  };
+
+  const summaryForCustom = (col: CustomColumn) => {
+    if (col.type !== 'label') return null;
+    const options = col.settings.options ?? [];
+    return (
+      <SummaryBar
+        segments={countBy(
+          sectionItems,
+          (i) => {
+            const value = i.customValues?.find((v) => v.columnId === col.id)?.value;
+            return value && 'optionId' in value ? value.optionId : null;
+          },
+          (i) => {
+            const value = i.customValues?.find((v) => v.columnId === col.id)?.value;
+            const optionId = value && 'optionId' in value ? value.optionId : '';
+            const option = options.find((o) => o.id === optionId);
+            return {
+              color: option?.color ?? '#808080',
+              label: option?.name ?? col.name,
+            };
+          },
+        )}
+      />
+    );
+  };
+
+  const submitAddIssue = () => {
+    const title = addDraft.trim();
+    if (!title) return;
+    setAddDraft('');
+    void extras.onAddIssue(column.id, title);
+  };
 
   const headerLabel = (id: ListFieldId, label: string) => {
     const sortable = SORTABLE_FIELDS[id];
@@ -899,14 +1042,7 @@ function ListIssueTable({
           </tr>
         </thead>
         <tbody>
-          {sortedIssues.length === 0 ? (
-            <tr>
-              <td colSpan={columnCount} className="muted">
-                No issues
-              </td>
-            </tr>
-          ) : (
-            sortedIssues.map((issue) => {
+          {sortedIssues.map((issue) => {
               const selected = extras.selectedIds.has(issue.id);
               const subtasks = issue.subtasks ?? [];
               const subtaskCount = subtasks.length || (issue._count?.subtasks ?? 0);
@@ -1001,9 +1137,54 @@ function ListIssueTable({
                 ) : null}
                 </Fragment>
               );
-            })
-          )}
+            })}
+          <tr className="monday-add-row">
+            <td className="monday-cell-select" aria-hidden />
+            <td colSpan={Math.max(1, columnCount - 1)}>
+              <form
+                className="monday-add-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitAddIssue();
+                }}
+              >
+                <input
+                  value={addDraft}
+                  maxLength={300}
+                  placeholder="+ Add issue"
+                  aria-label={`Add issue to ${column.name}`}
+                  onChange={(e) => setAddDraft(e.target.value)}
+                />
+              </form>
+            </td>
+          </tr>
         </tbody>
+        <tfoot>
+          <tr className="monday-summary-row">
+            <td className="monday-cell-select" aria-hidden />
+            {visibleFields.map((f) => (
+              <td
+                key={f.id}
+                className={
+                  f.id === 'epic' || f.id === 'status' || f.id === 'labels'
+                    ? 'monday-cell-labels'
+                    : undefined
+                }
+              >
+                {summaryForField(f.id)}
+              </td>
+            ))}
+            {extras.customColumns.map((c) => (
+              <td
+                key={c.id}
+                className={c.type === 'label' ? 'monday-cell-labels' : undefined}
+              >
+                {summaryForCustom(c)}
+              </td>
+            ))}
+            <td className="monday-td-add" aria-hidden />
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
@@ -1959,6 +2140,14 @@ export function BoardPage() {
         await loadBoard({ silent: true });
       } catch (err) {
         toast.push(err instanceof ApiError ? err.message : 'Create subtask failed', 'error');
+      }
+    },
+    onAddIssue: async (columnId, title) => {
+      try {
+        await api.createIssue(project.id, { title, columnId, type: 'task' });
+        await loadBoard({ silent: true });
+      } catch (err) {
+        toast.push(err instanceof ApiError ? err.message : 'Create issue failed', 'error');
       }
     },
   };

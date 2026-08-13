@@ -1333,7 +1333,7 @@ li.project-list-item:last-child {
 .board-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1.35rem;
   min-height: calc(100vh - 12rem);
 }
 
@@ -1349,15 +1349,17 @@ li.project-list-item:last-child {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-/* Monday-style list groups: no card outline, accent lives in the title
-   and the table's left bar instead. */
+/* Monday-style list groups: flush table, colored title, thick left bar
+   spanning the header and every row. */
 .board-list-section {
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: transparent;
   border: 0;
-  border-radius: var(--radius);
+  border-left: 6px solid var(--col-accent, var(--accent));
+  border-radius: 0;
+  padding-left: 0.15rem;
 }
 
 .board-column.is-over {
@@ -1365,38 +1367,63 @@ li.project-list-item:last-child {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--col-accent, var(--accent)) 28%, transparent);
 }
 
-.board-list-section.is-over .monday-table-wrap {
-  border-color: color-mix(in oklab, var(--col-accent, var(--accent)) 70%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--col-accent, var(--accent)) 30%, transparent);
+.board-list-section.is-over {
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--col-accent, var(--accent)) 45%, transparent);
 }
 
 .board-list-section .board-column-header {
   background: transparent;
   border-top: 0;
   border-bottom: 0;
-  padding: 0.4rem 0.25rem;
+  padding: 0.15rem 0.35rem 0.45rem 0.55rem;
 }
 
 .board-list-section .board-column-header h2 {
   color: var(--col-accent, var(--accent));
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .board-list-section .collapse-btn {
   color: var(--col-accent, var(--accent));
+  font-size: 0.95rem;
 }
 
 .board-list-section .count-pill {
   background: transparent;
-  color: color-mix(in oklab, var(--col-accent, var(--accent)) 65%, var(--muted));
+  padding: 0;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--col-accent, var(--accent)) 55%, var(--muted));
+}
+
+.board-list-section .column-grip,
+.board-list-section .column-actions {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.board-list-section:hover .column-grip,
+.board-list-section:hover .column-actions,
+.board-list-section .column-grip:focus-visible,
+.board-list-section .column-actions:focus-within {
+  opacity: 1;
+}
+
+.board-list-section .color-swatch {
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .board-list-section .monday-table-wrap {
-  border-left: 4px solid var(--col-accent, var(--accent));
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .board-list-section.is-column-dragging {
-  background: var(--surface);
+  background: color-mix(in oklab, var(--surface) 70%, transparent);
 }
 
 .board-column.is-column-dragging,
@@ -1724,16 +1751,16 @@ li.project-list-item:last-child {
 .monday-table {
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-variant-numeric: tabular-nums;
 }
 
 .monday-table th,
 .monday-table td {
-  height: 2.4rem;
-  padding: 0.3rem 0.6rem;
-  border-bottom: 1px solid var(--line);
-  border-inline-end: 1px solid color-mix(in oklab, var(--line) 62%, transparent);
+  height: 2.25rem;
+  padding: 0 0.55rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 55%, transparent);
+  border-inline-end: 1px solid color-mix(in oklab, var(--line) 42%, transparent);
   text-align: left;
   vertical-align: middle;
   white-space: nowrap;
@@ -1747,7 +1774,7 @@ li.project-list-item:last-child {
 }
 
 .monday-table tbody tr:last-child td {
-  border-bottom: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 55%, transparent);
 }
 
 .monday-table :focus-visible {
@@ -1870,6 +1897,67 @@ li.project-list-item:last-child {
   border-style: solid;
   border-color: var(--line-strong);
   outline: none;
+}
+
+.monday-add-row td {
+  background: var(--surface);
+}
+
+.monday-add-form {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+.monday-add-form input {
+  width: 100%;
+  max-width: 28rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  padding: 0.35rem 0;
+}
+
+.monday-add-form input::placeholder {
+  color: var(--muted);
+}
+
+.monday-add-form input:focus {
+  outline: none;
+}
+
+.monday-table tfoot td {
+  height: 2.4rem;
+  padding: 0.4rem 0.45rem;
+  background: color-mix(in oklab, var(--bg) 28%, var(--surface));
+  border-bottom: 0;
+  overflow: hidden;
+}
+
+.monday-table tfoot td.monday-cell-labels {
+  padding: 0.4rem 0.35rem;
+}
+
+.summary-bar {
+  display: flex;
+  width: 100%;
+  height: 1.45rem;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--muted) 16%, var(--surface));
+}
+
+.summary-bar > span {
+  min-width: 0;
+  height: 100%;
+}
+
+.summary-count {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 
@@ -2166,25 +2254,39 @@ li.project-list-item:last-child {
 }
 
 .monday-table th {
-  height: 2.2rem;
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  height: 2rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
   color: var(--muted);
-  background: color-mix(in oklab, var(--surface-2) 88%, transparent);
-  border-bottom: 1px solid var(--line-strong);
+  background: color-mix(in oklab, var(--surface) 82%, var(--bg));
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
 }
 
 .monday-table tbody tr:hover td {
-  background: color-mix(in oklab, var(--col-accent, var(--accent)) 6%, transparent);
+  background: color-mix(in oklab, var(--ink) 4.5%, var(--surface));
+}
+
+.monday-table tbody tr:hover td.monday-cell-labels {
+  background: transparent;
+}
+
+.monday-table tbody tr.is-selected td.monday-cell-labels {
+  background: transparent;
+}
+
+.board-list-section .column-name-btn:hover h2 {
+  text-decoration: none;
+  filter: brightness(1.1);
 }
 
 .monday-title-cell {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .monday-title-btn {
@@ -2192,17 +2294,18 @@ li.project-list-item:last-child {
   background: transparent;
   color: inherit;
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   padding: 0;
   text-align: left;
-  white-space: normal;
-  max-width: 28rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .monday-title-btn:hover {
   color: var(--accent);
-  text-decoration: underline;
 }
 
 .monday-cell-select,
@@ -2252,22 +2355,25 @@ li.project-list-item:last-child {
   gap: 0.25rem;
 }
 
-/* Monday-style label cell (list view) */
+/* Monday-style label/status/epic: the color fills the entire cell. */
 .monday-table td.monday-cell-labels {
-  padding: 0.25rem 0.5rem;
+  padding: 0;
+  overflow: hidden;
 }
 
 .label-cell-trigger {
   display: flex;
   align-items: stretch;
-  gap: 2px;
+  gap: 0;
   width: 100%;
   min-width: 0;
-  height: 2.1rem;
+  height: 100%;
+  min-height: 2.25rem;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
+  border-radius: 0;
 }
 
 .label-cell-pill {
@@ -2276,9 +2382,9 @@ li.project-list-item:last-child {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.5rem;
-  border-radius: var(--radius-xs);
-  font-size: 0.78rem;
+  padding: 0 0.45rem;
+  border-radius: 0;
+  font-size: 0.8rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2291,8 +2397,8 @@ li.project-list-item:last-child {
 
 .label-cell-placeholder {
   color: transparent;
-  background: color-mix(in oklab, var(--muted) 14%, var(--surface));
-  border: 1px dashed color-mix(in oklab, var(--muted) 35%, transparent);
+  background: color-mix(in oklab, var(--muted) 16%, var(--surface));
+  border: 0;
 }
 
 .label-cell-trigger:hover .label-cell-placeholder {
@@ -2300,16 +2406,20 @@ li.project-list-item:last-child {
 }
 
 /* Owner (assignee) avatar cell */
+.monday-table td:has(.owner-avatar) {
+  text-align: center;
+}
+
 .owner-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 1.7rem;
+  height: 1.7rem;
   border-radius: 999px;
   background: var(--accent);
-  color: var(--bg);
-  font-size: 0.78rem;
+  color: var(--on-accent, var(--bg));
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -2578,7 +2688,7 @@ li.project-list-item:last-child {
 
 .board-list-body {
   min-height: 3rem;
-  padding: 0 0 0.9rem;
+  padding: 0;
 }
 
 .board-list-section.is-collapsed .board-column-header {

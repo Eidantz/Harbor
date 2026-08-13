@@ -36,3 +36,4 @@ docker-data/
 apps/api/uploads/
 *.png
 *.html
+.playwright-shots/
